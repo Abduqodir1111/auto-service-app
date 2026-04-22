@@ -1,0 +1,26 @@
+{
+  "name": "stomvp-platform",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:api": "npm run dev -w @stomvp/api",
+    "dev:admin": "npm run dev -w @stomvp/admin",
+    "dev:mobile": "npm run dev -w @stomvp/mobile",
+    "dev": "concurrently -k -n api,admin,mobile -c blue,green,magenta \"npm run dev:api\" \"npm run dev:admin\" \"npm run dev:mobile\"",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write .",
+    "prisma:generate": "npm run prisma:generate -w @stomvp/api",
+    "prisma:migrate": "npm run prisma:migrate -w @stomvp/api",
+    "prisma:seed": "npm run prisma:seed -w @stomvp/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "prettier": "^3.4.2"
+  }
+}

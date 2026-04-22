@@ -1,0 +1,35 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { validateEnv } from './config/env.schema';
+import { PrismaModule } from './database/prisma.module';
+import { RedisModule } from './redis/redis.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { CategoriesModule } from './categories/categories.module';
+import { WorkshopsModule } from './workshops/workshops.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { FavoritesModule } from './favorites/favorites.module';
+import { ApplicationsModule } from './applications/applications.module';
+import { UploadsModule } from './uploads/uploads.module';
+import { AdminModule } from './admin/admin.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: validateEnv,
+    }),
+    PrismaModule,
+    RedisModule,
+    AuthModule,
+    UsersModule,
+    CategoriesModule,
+    WorkshopsModule,
+    ReviewsModule,
+    FavoritesModule,
+    ApplicationsModule,
+    UploadsModule,
+    AdminModule,
+  ],
+})
+export class AppModule {}

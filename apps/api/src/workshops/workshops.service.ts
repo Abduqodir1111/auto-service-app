@@ -1,0 +1,637 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PhotoStatus, Prisma, ReviewStatus, WorkshopStatus } from '@prisma/client';
+import { PhotoStatus as ApiPhotoStatus, UserRole } from '@stomvp/shared';
+import { Request } from 'express';
+import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
+import { UploadsService } from '../uploads/uploads.service';
+import { getRequestOrigin, buildUploadsProxyUrl } from '../uploads/uploads.utils';
+import { CreateWorkshopDto } from './dto/create-workshop.dto';
+import { ListWorkshopsQueryDto } from './dto/list-workshops-query.dto';
+import { ModerateWorkshopDto } from './dto/moderate-workshop.dto';
+import { UpdateWorkshopDto } from './dto/update-workshop.dto';
+
+const WORKSHOP_PUBLIC_CACHE_PREFIX = 'workshops:public:';
+
+@Injectable()
+export class WorkshopsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redisService: RedisService,
+    private readonly uploadsService: UploadsService,
+  ) {}
+
+  async listPublic(query: ListWorkshopsQueryDto, request?: Request) {
+    const origin = getRequestOrigin(request);
+    const cacheKey = `${WORKSHOP_PUBLIC_CACHE_PREFIX}${origin ?? 'default'}:${JSON.stringify(query)}`;
+    const cached = await this.redisService.getJson(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
+    const { page, pageSize, search, city, categoryId } = query;
+    const where: Prisma.WorkshopWhereInput = {
+      status: WorkshopStatus.APPROVED,
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+      ...(city ? { city: { contains: city, mode: 'insensitive' } } : {}),
+      ...(categoryId
+        ? {
+            categories: {
+              some: {
+                categoryId,
+              },
+            },
+          }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.workshop.findMany({
+        where,
+        orderBy: [{ favoritesCount: 'desc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: this.summaryInclude(),
+      }),
+      this.prisma.workshop.count({ where }),
+    ]);
+
+    const payload = {
+      data: items.map((workshop) => this.serializeSummary(workshop, origin)),
+      meta: {
+        total,
+        page,
+        pageSize,
+        pageCount: Math.ceil(total / pageSize),
+      },
+    };
+
+    await this.redisService.setJson(cacheKey, payload, 60);
+    return payload;
+  }
+
+  async getDetails(
+    id: string,
+    user?: { sub: string; role: UserRole },
+    request?: Request,
+  ) {
+    const workshop = await this.prisma.workshop.findUnique({
+      where: { id },
+      include: this.detailInclude(user?.role === UserRole.ADMIN || false, user?.sub),
+    });
+
+    if (!workshop) {
+      throw new NotFoundException('Workshop not found');
+    }
+
+    const isOwner = user?.sub === workshop.ownerId;
+    const canViewNonPublic = isOwner || user?.role === UserRole.ADMIN;
+
+    if (workshop.status !== WorkshopStatus.APPROVED && !canViewNonPublic) {
+      throw new NotFoundException('Workshop not found');
+    }
+
+    const favorite = user
+      ? await this.prisma.favorite.findUnique({
+          where: {
+            userId_workshopId: {
+              userId: user.sub,
+              workshopId: id,
+            },
+          },
+          select: {
+            id: true,
+          },
+        })
+      : null;
+
+    return this.serializeDetails(
+      {
+        ...workshop,
+        isFavorite: Boolean(favorite),
+      },
+      getRequestOrigin(request),
+    );
+  }
+
+  async getMine(userId: string, request?: Request) {
+    const workshops = await this.prisma.workshop.findMany({
+      where: { ownerId: userId },
+      orderBy: { updatedAt: 'desc' },
+      include: this.detailInclude(true, userId),
+    });
+
+    const origin = getRequestOrigin(request);
+    return workshops.map((workshop) => this.serializeDetails(workshop, origin));
+  }
+
+  async createDraft(ownerId: string, request?: Request) {
+    const workshop = await this.prisma.workshop.create({
+      data: {
+        ownerId,
+        title: '',
+        description: '',
+        phone: '',
+        addressLine: '',
+        city: '',
+        status: WorkshopStatus.DRAFT,
+      },
+      include: this.detailInclude(true, ownerId),
+    });
+
+    await this.invalidatePublicCache();
+    return this.serializeDetails(workshop, getRequestOrigin(request));
+  }
+
+  async create(ownerId: string, dto: CreateWorkshopDto) {
+    const nextStatus = this.resolveStatusAfterSave({
+      role: UserRole.MASTER,
+      currentStatus: WorkshopStatus.DRAFT,
+      blockers: this.getModerationBlockers({
+        title: dto.title,
+        description: dto.description,
+        phone: dto.phone,
+        addressLine: dto.addressLine,
+        city: dto.city,
+        categories: dto.categoryIds,
+        services: dto.services.map((service) => ({ name: service.name })),
+      }),
+    });
+
+    const workshop = await this.prisma.workshop.create({
+      data: {
+        ownerId,
+        title: dto.title,
+        description: dto.description,
+        phone: dto.phone,
+        telegram: dto.telegram,
+        addressLine: dto.addressLine,
+        city: dto.city,
+        openingHours: dto.openingHours,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        status: nextStatus,
+        rejectionReason: nextStatus === WorkshopStatus.PENDING ? null : undefined,
+        categories: {
+          create: dto.categoryIds.map((categoryId) => ({
+            categoryId,
+          })),
+        },
+        services: {
+          create: dto.services.map((service) => ({
+            categoryId: service.categoryId,
+            name: service.name,
+            description: service.description,
+            priceFrom: service.priceFrom,
+            priceTo: service.priceTo,
+          })),
+        },
+      },
+      include: this.detailInclude(true, ownerId),
+    });
+
+    await this.invalidatePublicCache();
+    return this.serializeDetails(workshop);
+  }
+
+  async update(
+    id: string,
+    user: { sub: string; role: UserRole },
+    dto: UpdateWorkshopDto,
+  ) {
+    const workshop = await this.prisma.workshop.findUnique({
+      where: { id },
+    });
+
+    if (!workshop) {
+      throw new NotFoundException('Workshop not found');
+    }
+
+    this.assertOwnerOrAdmin(workshop.ownerId, user);
+
+    const nextStatus =
+      user.role === UserRole.ADMIN ? workshop.status : workshop.status;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const baseWorkshop = await tx.workshop.update({
+        where: { id },
+        data: {
+          title: dto.title,
+          description: dto.description,
+          phone: dto.phone,
+          telegram: dto.telegram,
+          addressLine: dto.addressLine,
+          city: dto.city,
+          openingHours: dto.openingHours,
+          latitude: dto.latitude,
+          longitude: dto.longitude,
+          status: nextStatus,
+        },
+      });
+
+      if (dto.categoryIds) {
+        await tx.workshopCategory.deleteMany({ where: { workshopId: id } });
+        await tx.workshopCategory.createMany({
+          data: dto.categoryIds.map((categoryId) => ({
+            workshopId: id,
+            categoryId,
+          })),
+        });
+      }
+
+      if (dto.services) {
+        await tx.workshopService.deleteMany({ where: { workshopId: id } });
+
+        if (dto.services.length > 0) {
+          await tx.workshopService.createMany({
+            data: dto.services.map((service) => ({
+              workshopId: id,
+              categoryId: service.categoryId,
+              name: service.name,
+              description: service.description,
+              priceFrom: service.priceFrom,
+              priceTo: service.priceTo,
+            })),
+          });
+        }
+      }
+
+      const hydratedWorkshop = await tx.workshop.findUnique({
+        where: { id },
+        include: {
+          categories: true,
+          services: true,
+        },
+      });
+
+      if (!hydratedWorkshop) {
+        throw new NotFoundException('Workshop not found');
+      }
+
+      const blockers = this.getModerationBlockers(hydratedWorkshop);
+      const resolvedStatus = this.resolveStatusAfterSave({
+        role: user.role,
+        currentStatus: workshop.status,
+        blockers,
+      });
+
+      const rejectionReason =
+        resolvedStatus === WorkshopStatus.PENDING
+          ? null
+          : resolvedStatus === WorkshopStatus.REJECTED
+            ? workshop.rejectionReason
+            : null;
+
+      return tx.workshop.update({
+        where: { id },
+        data: {
+          status: resolvedStatus,
+          rejectionReason,
+        },
+      });
+    });
+
+    await this.invalidatePublicCache();
+    return this.getDetails(updated.id, user);
+  }
+
+  async submitForModeration(id: string, user: { sub: string; role: UserRole }) {
+    const workshop = await this.prisma.workshop.findUnique({
+      where: { id },
+      include: {
+        categories: true,
+        services: true,
+      },
+    });
+
+    if (!workshop) {
+      throw new NotFoundException('Workshop not found');
+    }
+
+    if (workshop.status === WorkshopStatus.BLOCKED) {
+      throw new ForbiddenException('Blocked workshop cannot be submitted');
+    }
+
+    this.assertOwnerOrAdmin(workshop.ownerId, user);
+
+    const blockers = this.getModerationBlockers(workshop);
+    if (blockers.length > 0) {
+      throw new BadRequestException(blockers);
+    }
+
+    const updated = await this.prisma.workshop.update({
+      where: { id },
+      data: {
+        status: WorkshopStatus.PENDING,
+        rejectionReason: null,
+      },
+    });
+
+    await this.invalidatePublicCache();
+    return updated;
+  }
+
+  async moderate(id: string, dto: ModerateWorkshopDto) {
+    const workshop = await this.prisma.workshop.findUnique({ where: { id } });
+
+    if (!workshop) {
+      throw new NotFoundException('Workshop not found');
+    }
+
+    const updated = await this.prisma.workshop.update({
+      where: { id },
+      data: {
+        status: WorkshopStatus[dto.status as keyof typeof WorkshopStatus],
+        rejectionReason: dto.rejectionReason ?? null,
+      },
+    });
+
+    if (dto.status === WorkshopStatus.APPROVED && dto.approvePendingPhotos) {
+      await this.uploadsService.moderatePendingForWorkshop(id, ApiPhotoStatus.APPROVED);
+    }
+
+    await this.invalidatePublicCache();
+    return updated;
+  }
+
+  async remove(id: string, user: { sub: string; role: UserRole }) {
+    const workshop = await this.prisma.workshop.findUnique({
+      where: { id },
+      include: {
+        photos: {
+          select: {
+            key: true,
+          },
+        },
+      },
+    });
+
+    if (!workshop) {
+      throw new NotFoundException('Workshop not found');
+    }
+
+    this.assertOwnerOrAdmin(workshop.ownerId, user);
+
+    const photoKeys = workshop.photos.map((photo) => photo.key);
+
+    if (photoKeys.length > 0) {
+      await this.uploadsService.deleteFiles(photoKeys);
+    }
+
+    await this.prisma.workshop.delete({
+      where: { id },
+    });
+
+    await this.invalidatePublicCache();
+
+    return {
+      id,
+      deleted: true,
+    };
+  }
+
+  async listPending() {
+    const workshops = await this.prisma.workshop.findMany({
+      where: {
+        status: {
+          in: [WorkshopStatus.PENDING, WorkshopStatus.REJECTED],
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      include: this.detailInclude(true),
+    });
+
+    return workshops.map((workshop) => this.serializeDetails(workshop));
+  }
+
+  async listAllAdmin() {
+    const workshops = await this.prisma.workshop.findMany({
+      orderBy: { updatedAt: 'desc' },
+      include: this.detailInclude(true),
+    });
+
+    return workshops.map((workshop) => this.serializeDetails(workshop));
+  }
+
+  private summaryInclude() {
+    return {
+      categories: {
+        include: {
+          category: true,
+        },
+      },
+      photos: {
+        where: {
+          status: PhotoStatus.APPROVED,
+        },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+      },
+    } satisfies Prisma.WorkshopInclude;
+  }
+
+  private detailInclude(includeAllPhotos: boolean, userId?: string) {
+    return {
+      owner: true,
+      categories: {
+        include: {
+          category: true,
+        },
+      },
+      services: true,
+      photos: {
+        where: includeAllPhotos
+          ? undefined
+          : {
+              status: PhotoStatus.APPROVED,
+            },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+      },
+      reviews: {
+        where:
+          includeAllPhotos && userId
+            ? {
+                OR: [{ status: ReviewStatus.PUBLISHED }, { authorId: userId }],
+              }
+            : { status: ReviewStatus.PUBLISHED },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          author: true,
+        },
+      },
+    } satisfies Prisma.WorkshopInclude;
+  }
+
+  private serializeSummary(workshop: any, origin?: string) {
+    return {
+      id: workshop.id,
+      ownerId: workshop.ownerId,
+      title: workshop.title,
+      description: workshop.description,
+      phone: workshop.phone,
+      telegram: workshop.telegram,
+      addressLine: workshop.addressLine,
+      city: workshop.city,
+      status: workshop.status,
+      rejectionReason: workshop.rejectionReason,
+      latitude: workshop.latitude != null ? Number(workshop.latitude) : null,
+      longitude: workshop.longitude != null ? Number(workshop.longitude) : null,
+      averageRating: Number(workshop.averageRating ?? 0),
+      reviewsCount: workshop.reviewsCount,
+      favoritesCount: workshop.favoritesCount,
+      isFavorite: workshop.isFavorite,
+      createdAt: workshop.createdAt.toISOString(),
+      categories: workshop.categories.map(({ category }: any) => ({
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+        description: category.description,
+      })),
+      photos: workshop.photos.map((photo: any) => ({
+        id: photo.id,
+        url: buildUploadsProxyUrl(photo.key, origin),
+        key: photo.key,
+        isPrimary: photo.isPrimary,
+        status: photo.status,
+      })),
+    };
+  }
+
+  private serializeDetails(workshop: any, origin?: string) {
+    return {
+      ...this.serializeSummary(workshop, origin),
+      openingHours: workshop.openingHours,
+      services: workshop.services.map((service: any) => ({
+        id: service.id,
+        name: service.name,
+        description: service.description,
+        priceFrom: service.priceFrom ? Number(service.priceFrom) : null,
+        priceTo: service.priceTo ? Number(service.priceTo) : null,
+      })),
+      owner: {
+        id: workshop.owner.id,
+        fullName: workshop.owner.fullName,
+        phone: workshop.owner.phone,
+        email: workshop.owner.email,
+        role: workshop.owner.role,
+        isBlocked: workshop.owner.isBlocked,
+        createdAt: workshop.owner.createdAt.toISOString(),
+      },
+      reviews: (workshop.reviews ?? []).map((review: any) => ({
+        id: review.id,
+        authorId: review.authorId,
+        workshopId: review.workshopId,
+        rating: review.rating,
+        comment: review.comment,
+        status: review.status,
+        createdAt: review.createdAt.toISOString(),
+        author: {
+          id: review.author.id,
+          fullName: review.author.fullName,
+        },
+      })),
+    };
+  }
+
+  private assertOwnerOrAdmin(ownerId: string, user: { sub: string; role: UserRole }) {
+    if (user.role === UserRole.ADMIN) {
+      return;
+    }
+
+    if (user.sub !== ownerId) {
+      throw new ForbiddenException('You do not have access to this workshop');
+    }
+  }
+
+  private getModerationBlockers(workshop: {
+    title: string;
+    description: string;
+    phone: string;
+    addressLine: string;
+    city: string;
+    categories: Array<unknown>;
+    services: Array<{ name: string }>;
+  }) {
+    const blockers: string[] = [];
+
+    if (workshop.title.trim().length < 3) {
+      blockers.push('Добавьте название объявления.');
+    }
+
+    if (workshop.description.trim().length < 10) {
+      blockers.push('Добавьте описание минимум на 10 символов.');
+    }
+
+    if (workshop.phone.trim().length < 6) {
+      blockers.push('Укажите контактный телефон.');
+    }
+
+    if (workshop.addressLine.trim().length < 4) {
+      blockers.push('Укажите адрес мастерской.');
+    }
+
+    if (workshop.city.trim().length < 2) {
+      blockers.push('Укажите город.');
+    }
+
+    if (workshop.categories.length === 0) {
+      blockers.push('Выберите хотя бы одну категорию услуг.');
+    }
+
+    if (workshop.services.length === 0) {
+      blockers.push('Добавьте хотя бы одну услугу.');
+    } else if (workshop.services.some((service) => service.name.trim().length < 2)) {
+      blockers.push('Заполните названия всех услуг.');
+    }
+
+    return blockers;
+  }
+
+  private resolveStatusAfterSave({
+    role,
+    currentStatus,
+    blockers,
+  }: {
+    role: UserRole;
+    currentStatus: WorkshopStatus;
+    blockers: string[];
+  }) {
+    if (role === UserRole.ADMIN) {
+      return currentStatus;
+    }
+
+    if (currentStatus === WorkshopStatus.BLOCKED) {
+      return WorkshopStatus.BLOCKED;
+    }
+
+    if (blockers.length === 0) {
+      return WorkshopStatus.PENDING;
+    }
+
+    if (currentStatus === WorkshopStatus.REJECTED) {
+      return WorkshopStatus.REJECTED;
+    }
+
+    if (currentStatus === WorkshopStatus.PENDING) {
+      return WorkshopStatus.PENDING;
+    }
+
+    return WorkshopStatus.DRAFT;
+  }
+
+  private async invalidatePublicCache() {
+    await this.redisService.deleteByPrefix(WORKSHOP_PUBLIC_CACHE_PREFIX);
+  }
+}
