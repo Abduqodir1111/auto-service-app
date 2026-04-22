@@ -20,6 +20,12 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  DEVSMS_API_BASE_URL: z.string().url().default('https://devsms.uz/api'),
+  DEVSMS_API_TOKEN: z.string().min(1).optional(),
+  SMS_SERVICE_NAME: z.string().min(2).default('STOMVP'),
+  SMS_OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  SMS_OTP_RESEND_SECONDS: z.coerce.number().int().positive().default(60),
+  SMS_OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

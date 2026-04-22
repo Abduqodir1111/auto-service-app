@@ -3,13 +3,25 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, JwtUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
+import { RequestSignUpCodeDto } from './dto/request-sign-up-code.dto';
 import { SignInDto } from './dto/sign-in.dto';
 import { SignUpDto } from './dto/sign-up.dto';
+import { VerifySignUpCodeDto } from './dto/verify-sign-up-code.dto';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('register/request-code')
+  requestSignUpCode(@Body() dto: RequestSignUpCodeDto) {
+    return this.authService.requestSignUpCode(dto);
+  }
+
+  @Post('register/verify-code')
+  verifySignUpCode(@Body() dto: VerifySignUpCodeDto) {
+    return this.authService.verifySignUpCode(dto);
+  }
 
   @Post('register')
   register(@Body() dto: SignUpDto) {

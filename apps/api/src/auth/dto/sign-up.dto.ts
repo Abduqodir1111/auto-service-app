@@ -20,6 +20,10 @@ export class SignUpDto {
   @MinLength(6)
   password!: string;
 
+  @ApiProperty()
+  @IsString()
+  verificationToken!: string;
+
   @ApiProperty({ enum: UserRole, enumName: 'UserRole' })
   @IsEnum(UserRole)
   role!: UserRole;

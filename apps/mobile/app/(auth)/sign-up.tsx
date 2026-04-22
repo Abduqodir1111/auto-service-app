@@ -1,28 +1,42 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
+import axios from 'axios';
 import { router } from 'expo-router';
+import React from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
-import { AuthPayload, UserRole } from '@stomvp/shared';
+import { UserRole } from '@stomvp/shared';
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
-import { useAuthStore } from '../../src/store/auth-store';
+import { usePendingSignUpStore } from '../../src/store/pending-sign-up-store';
 
-const schema = z.object({
-  fullName: z.string().min(2, 'Введите имя'),
-  phone: z.string().min(6, 'Введите телефон'),
-  email: z.string().email('Некорректный email').optional().or(z.literal('')),
-  password: z.string().min(6, 'Минимум 6 символов'),
-  role: z.nativeEnum(UserRole),
-});
+const schema = z
+  .object({
+    fullName: z.string().min(2, 'Введите имя'),
+    phone: z.string().min(6, 'Введите телефон'),
+    password: z.string().min(6, 'Минимум 6 символов'),
+    confirmPassword: z.string().min(6, 'Повторите пароль'),
+    role: z.nativeEnum(UserRole),
+  })
+  .refine((values) => values.password === values.confirmPassword, {
+    message: 'Пароли не совпадают',
+    path: ['confirmPassword'],
+  });
 
 type FormValues = z.infer<typeof schema>;
+type RequestCodeResponse = {
+  success: boolean;
+  expiresIn: number;
+  resendIn: number;
+};
 
 export default function SignUpScreen() {
-  const setSession = useAuthStore((state) => state.setSession);
+  const pendingPayload = usePendingSignUpStore((state) => state.payload);
+  const setPendingPayload = usePendingSignUpStore((state) => state.setPayload);
+  const [requestError, setRequestError] = React.useState<string | null>(null);
   const {
     control,
     handleSubmit,
@@ -32,23 +46,33 @@ export default function SignUpScreen() {
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      role: UserRole.CLIENT,
+      fullName: pendingPayload?.fullName ?? '',
+      phone: pendingPayload?.phone ?? '',
+      password: pendingPayload?.password ?? '',
+      confirmPassword: pendingPayload?.password ?? '',
+      role: pendingPayload?.role ?? UserRole.CLIENT,
     },
   });
 
   const role = watch('role');
 
-  const registerMutation = useMutation({
-    mutationFn: async (values: FormValues) => {
-      const { data } = await api.post<AuthPayload>('/auth/register', {
-        ...values,
-        email: values.email || undefined,
-      });
+  const requestCodeMutation = useMutation({
+    mutationFn: async (value: { phone: string }) => {
+      const { data } = await api.post<RequestCodeResponse>('/auth/register/request-code', value);
       return data;
     },
-    onSuccess: async (payload) => {
-      await setSession(payload);
-      router.replace('/(tabs)');
+    onSuccess: (_, variables, context) => {
+      setRequestError(null);
+      router.push('/(auth)/sign-up-verify');
+    },
+    onError: (error) => {
+      if (!axios.isAxiosError(error)) {
+        setRequestError('Не удалось отправить SMS-код');
+        return;
+      }
+
+      const message = error.response?.data?.message;
+      setRequestError(typeof message === 'string' ? message : 'Не удалось отправить SMS-код');
     },
   });
 
@@ -57,7 +81,8 @@ export default function SignUpScreen() {
       <View style={{ gap: 8 }}>
         <Text style={styles.title}>Создать аккаунт</Text>
         <Text style={styles.subtitle}>
-          Клиент ищет сервисы, мастер создаёт и ведёт карточку СТО.
+          Заполните данные, затем мы отправим 5-значный код на ваш номер и
+          откроем следующий шаг подтверждения.
         </Text>
       </View>
 
@@ -96,19 +121,8 @@ export default function SignUpScreen() {
               label="Телефон"
               value={field.value}
               onChangeText={field.onChange}
+              keyboardType="phone-pad"
               error={errors.phone?.message}
-            />
-          )}
-        />
-        <Controller
-          control={control}
-          name="email"
-          render={({ field }) => (
-            <Field
-              label="Email"
-              value={field.value}
-              onChangeText={field.onChange}
-              error={errors.email?.message}
             />
           )}
         />
@@ -125,15 +139,42 @@ export default function SignUpScreen() {
             />
           )}
         />
+        <Controller
+          control={control}
+          name="confirmPassword"
+          render={({ field }) => (
+            <Field
+              label="Подтвердите пароль"
+              secureTextEntry
+              value={field.value}
+              onChangeText={field.onChange}
+              error={errors.confirmPassword?.message}
+            />
+          )}
+        />
 
         <Pressable
-          onPress={handleSubmit((values) => registerMutation.mutate(values))}
-          style={styles.button}
+          onPress={handleSubmit((values) => {
+            setPendingPayload({
+              fullName: values.fullName,
+              phone: values.phone,
+              password: values.password,
+              role: values.role,
+            });
+
+            requestCodeMutation.mutate({
+              phone: values.phone,
+            });
+          })}
+          style={[styles.button, requestCodeMutation.isPending && styles.buttonDisabled]}
+          disabled={requestCodeMutation.isPending}
         >
           <Text style={styles.buttonText}>
-            {registerMutation.isPending ? 'Создаём...' : 'Создать аккаунт'}
+            {requestCodeMutation.isPending ? 'Отправляем SMS...' : 'Зарегистрироваться'}
           </Text>
         </Pressable>
+
+        {requestError ? <Text style={styles.error}>{requestError}</Text> : null}
       </View>
     </Screen>
   );
@@ -192,5 +233,12 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  error: {
+    color: colors.danger,
+    fontSize: 13,
   },
 });

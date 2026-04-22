@@ -49,6 +49,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)/sign-in" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)/sign-up" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/sign-up-verify" options={{ headerShown: false }} />
         <Stack.Screen name="workshop/[id]" options={{ title: 'Карточка СТО' }} />
         <Stack.Screen name="map/picker" options={{ title: 'Точка на карте' }} />
         <Stack.Screen name="map/view" options={{ title: 'Локация СТО' }} />
