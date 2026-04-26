@@ -133,6 +133,11 @@ export type WorkshopSummary = {
   createdAt: string;
   categories: ServiceCategory[];
   photos: WorkshopPhoto[];
+  /**
+   * Distance in meters from the user's coordinates to the workshop. Populated
+   * only when /api/workshops is queried with `lat` and `lng`. Omitted otherwise.
+   */
+  distanceMeters?: number | null;
 };
 
 export type WorkshopDetails = WorkshopSummary & {

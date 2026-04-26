@@ -21,7 +21,15 @@ import { WorkshopCard } from '../../components/workshop-card';
 import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
+import { type Coordinates, getDeviceCoordinates } from '../../src/utils/device-location';
 import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
+
+// Tashkent center as a sensible default before we know where the user is.
+const TASHKENT_CENTER: Coordinates = {
+  latitude: 41.2995,
+  longitude: 69.2401,
+};
+const CATALOG_RADIUS_METERS = 50_000;
 
 const filterPalettes = [
   { background: '#FFF1E7', badge: '#FFE3D0', border: '#F1D1BC', icon: colors.accentDark },
@@ -49,13 +57,36 @@ export default function CatalogScreen() {
     },
   });
 
+  const [userCoords, setUserCoords] = useState<Coordinates | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await getDeviceCoordinates(TASHKENT_CENTER);
+      if (!cancelled) {
+        setUserCoords(result.coordinates);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Round the coords used in the query key so tiny GPS jitter (a few metres)
+  // doesn't trigger a refetch on every render. ~3 decimals ≈ 100 m precision.
+  const roundedLat = userCoords ? Math.round(userCoords.latitude * 1000) / 1000 : null;
+  const roundedLng = userCoords ? Math.round(userCoords.longitude * 1000) / 1000 : null;
+
   const workshopsQuery = useQuery({
-    queryKey: ['workshops', search, categoryId],
+    queryKey: ['workshops', search, categoryId, roundedLat, roundedLng],
     queryFn: async () => {
       const { data } = await api.get<{ data: WorkshopSummary[] }>('/workshops', {
         params: {
           search: search || undefined,
           categoryId,
+          lat: userCoords?.latitude,
+          lng: userCoords?.longitude,
+          radius: userCoords ? CATALOG_RADIUS_METERS : undefined,
         },
       });
       return data.data;

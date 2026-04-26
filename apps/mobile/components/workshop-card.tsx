@@ -15,6 +15,14 @@ type Props = {
   };
 };
 
+function formatDistance(meters: number) {
+  if (meters < 1000) {
+    return `${Math.round(meters)} м`;
+  }
+  const km = meters / 1000;
+  return km < 10 ? `${km.toFixed(1)} км` : `${Math.round(km)} км`;
+}
+
 export function WorkshopCard({ workshop, favoriteAction }: Props) {
   const coverPhoto = workshop.photos.find((photo) => photo.isPrimary) ?? workshop.photos[0];
   const hasCoordinates = workshop.latitude != null && workshop.longitude != null;
@@ -52,6 +60,9 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
           </View>
           <Text style={styles.subtitle}>
             {workshop.city} • {workshop.addressLine}
+            {typeof workshop.distanceMeters === 'number'
+              ? ` • ${formatDistance(workshop.distanceMeters)}`
+              : ''}
           </Text>
         </View>
 
