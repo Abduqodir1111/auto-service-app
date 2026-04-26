@@ -18,6 +18,35 @@ async function main() {
     },
   });
 
+  // Test accounts for App Store / Google Play review.
+  // Reviewers can sign in directly with these credentials.
+  // Same password for both to keep the review notes simple.
+  const reviewPassword = await hash('Review2026!', 10);
+
+  await prisma.user.upsert({
+    where: { phone: '+998900000010' },
+    update: {},
+    create: {
+      fullName: 'Review Client',
+      phone: '+998900000010',
+      email: 'review-client@mastertop.local',
+      passwordHash: reviewPassword,
+      role: UserRole.CLIENT,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { phone: '+998900000020' },
+    update: {},
+    create: {
+      fullName: 'Review Master',
+      phone: '+998900000020',
+      email: 'review-master@mastertop.local',
+      passwordHash: reviewPassword,
+      role: UserRole.MASTER,
+    },
+  });
+
   const categories = [
     {
       name: 'Русификация',

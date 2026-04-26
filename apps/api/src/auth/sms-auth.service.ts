@@ -27,6 +27,13 @@ type VerifiedSignUpPhone = {
 
 @Injectable()
 export class SmsAuthService {
+  // App Store / Google Play review bypass: this phone never sends SMS,
+  // the verification code is always REVIEW_BYPASS_CODE. Used so reviewers
+  // can complete the registration flow without receiving a real SMS.
+  // The login flow uses pre-seeded review accounts (see prisma/seed.ts).
+  private static readonly REVIEW_BYPASS_PHONE = '+998900000099';
+  private static readonly REVIEW_BYPASS_CODE = '00000';
+
   private readonly providerBaseUrl: string;
   private readonly providerToken?: string;
   private readonly serviceName: string;
@@ -77,8 +84,14 @@ export class SmsAuthService {
       }
     }
 
-    const code = this.generateCode();
-    await this.sendRegistrationOtpSms(smsPhone, code);
+    const isReviewBypass = normalizedPhone === SmsAuthService.REVIEW_BYPASS_PHONE;
+    const code = isReviewBypass
+      ? SmsAuthService.REVIEW_BYPASS_CODE
+      : this.generateCode();
+
+    if (!isReviewBypass) {
+      await this.sendRegistrationOtpSms(smsPhone, code);
+    }
 
     const payload: PendingSignUpCode = {
       phone: normalizedPhone,

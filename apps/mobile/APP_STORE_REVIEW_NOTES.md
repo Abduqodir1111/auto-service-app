@@ -17,13 +17,26 @@ Please use the test accounts below for review.
 
 ### Client test account
 
-- Phone: `TODO`
-- Password: `TODO`
+- Phone: `+998900000010`
+- Password: `Review2026!`
 
 ### Master test account
 
-- Phone: `TODO`
-- Password: `TODO`
+- Phone: `+998900000020`
+- Password: `Review2026!`
+
+### Optional: testing the registration flow
+
+The phone-based sign-up uses an SMS one-time code, which is hard for
+reviewers to receive. For review purposes we provide a bypass phone
+number that does NOT send a real SMS and accepts a fixed code:
+
+- Phone: `+998900000099`
+- SMS code: `00000`
+
+Use this number on the registration screen to walk through the
+"Request code → Verify code → Set name and password" flow without
+needing to receive an actual SMS.
 
 ### What can be tested
 
@@ -62,6 +75,6 @@ listing photos, requests, reviews and favorites.
 
 ## Before Submission
 
-- Replace both `TODO` placeholders with real working test credentials
-- Make sure both accounts are not blocked
+- Make sure both review accounts are not blocked (run `npm run prisma:seed -w @stomvp/api` against prod DB if they got removed)
 - Make sure at least one approved workshop is visible in the catalog for App Review
+- Verify the bypass phone `+998900000099` is **NOT** registered as a real user in the DB; if it is, delete it so reviewers can complete the registration walkthrough
