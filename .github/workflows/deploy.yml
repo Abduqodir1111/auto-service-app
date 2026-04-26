@@ -1,0 +1,59 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  # Позволяет запустить деплой вручную из UI вкладки Actions
+  workflow_dispatch:
+
+# Только один деплой одновременно. Если новый push прилетит во время деплоя,
+# текущий доедет, потом запустится свежий.
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  build-check:
+    name: Build sanity check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --include=dev
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        working-directory: apps/api
+
+      - name: Build shared package
+        run: npm run build -w @stomvp/shared
+
+      - name: Build API
+        run: npm run build -w @stomvp/api
+
+      - name: Build Admin
+        run: npm run build -w @stomvp/admin
+
+  deploy:
+    name: Deploy to production VPS
+    needs: build-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Trigger deploy.sh on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 164.90.232.78
+          username: abduqodir
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # SSH key on VPS has forced command="sudo /opt/stomvp/deploy.sh main"
+          # so whatever script we put here is ignored — server runs deploy.sh.
+          # We still send a placeholder so the action doesn't error.
+          script: 'echo "trigger deploy"'
+          script_stop: true
