@@ -15,6 +15,7 @@ import {
 import { UserRole } from '@stomvp/shared';
 import { Request } from 'express';
 import { PrismaService } from '../database/prisma.service';
+import { PushNotificationsService } from '../devices/push-notifications.service';
 import { RedisService } from '../redis/redis.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { getRequestOrigin, buildUploadsProxyUrl } from '../uploads/uploads.utils';
@@ -25,12 +26,30 @@ import { UpdateWorkshopDto } from './dto/update-workshop.dto';
 
 const WORKSHOP_PUBLIC_CACHE_PREFIX = 'workshops:public:';
 
+const WORKSHOP_MODERATION_PUSH: Partial<
+  Record<WorkshopStatus, { title: string; bodyTail: string }>
+> = {
+  [WorkshopStatus.APPROVED]: {
+    title: '✅ Мастерская одобрена',
+    bodyTail: 'опубликована и доступна клиентам.',
+  },
+  [WorkshopStatus.REJECTED]: {
+    title: '❌ Мастерская отклонена',
+    bodyTail: 'не прошла модерацию.',
+  },
+  [WorkshopStatus.BLOCKED]: {
+    title: '🚫 Мастерская заблокирована',
+    bodyTail: 'недоступна для клиентов.',
+  },
+};
+
 @Injectable()
 export class WorkshopsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
     private readonly uploadsService: UploadsService,
+    private readonly push: PushNotificationsService,
   ) {}
 
   async listPublic(
@@ -526,6 +545,23 @@ export class WorkshopsService {
     });
 
     await this.invalidatePublicCache();
+
+    const pushSpec = WORKSHOP_MODERATION_PUSH[nextStatus];
+    if (pushSpec) {
+      const reasonSuffix = dto.rejectionReason?.trim()
+        ? ` Причина: ${dto.rejectionReason.trim().slice(0, 200)}`
+        : '';
+      void this.push.sendToUser(workshop.ownerId, {
+        title: pushSpec.title,
+        body: `«${workshop.title}» ${pushSpec.bodyTail}${reasonSuffix}`,
+        data: {
+          type: 'workshop.moderation',
+          workshopId: workshop.id,
+          status: nextStatus,
+        },
+      });
+    }
+
     return updated;
   }
 

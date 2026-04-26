@@ -6,13 +6,27 @@ import {
 import { ApplicationStatus, WorkshopStatus } from '@prisma/client';
 import { UserRole } from '@stomvp/shared';
 import { PrismaService } from '../database/prisma.service';
+import { PushNotificationsService } from '../devices/push-notifications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { ListApplicationsQueryDto } from './dto/list-applications-query.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
 
+const APPLICATION_STATUS_PUSH: Record<
+  ApplicationStatus,
+  { title: string; verb: string } | null
+> = {
+  [ApplicationStatus.NEW]: null, // initial state, no push needed
+  [ApplicationStatus.IN_PROGRESS]: { title: '🔧 Заявка принята', verb: 'принял в работу' },
+  [ApplicationStatus.COMPLETED]: { title: '✅ Заявка выполнена', verb: 'отметил как выполненную' },
+  [ApplicationStatus.CANCELLED]: { title: '🚫 Заявка отменена', verb: 'отменил' },
+};
+
 @Injectable()
 export class ApplicationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: PushNotificationsService,
+  ) {}
 
   async create(userId: string, role: UserRole, dto: CreateApplicationDto) {
     if (role === UserRole.ADMIN) {
@@ -27,7 +41,7 @@ export class ApplicationsService {
       throw new NotFoundException('Workshop not found');
     }
 
-    return this.prisma.application.create({
+    const application = await this.prisma.application.create({
       data: {
         customerId: userId,
         workshopId: dto.workshopId,
@@ -38,6 +52,20 @@ export class ApplicationsService {
         preferredDate: dto.preferredDate ? new Date(dto.preferredDate) : undefined,
       },
     });
+
+    // Notify the workshop owner. Push errors are swallowed by the helper —
+    // we never want a flaky push to fail the create-application call.
+    void this.push.sendToUser(workshop.ownerId, {
+      title: '🔔 Новая заявка',
+      body: `${dto.customerName}: ${dto.issueDescription}`.slice(0, 200),
+      data: {
+        type: 'application.created',
+        applicationId: application.id,
+        workshopId: workshop.id,
+      },
+    });
+
+    return application;
   }
 
   async listMine(
@@ -103,15 +131,30 @@ export class ApplicationsService {
       throw new ForbiddenException('You cannot update this application');
     }
 
+    const newStatus = ApplicationStatus[dto.status as keyof typeof ApplicationStatus];
     const updated = await this.prisma.application.update({
       where: { id },
       data: {
-        status: ApplicationStatus[dto.status as keyof typeof ApplicationStatus],
+        status: newStatus,
       },
       include: {
         workshop: true,
       },
     });
+
+    const pushSpec = APPLICATION_STATUS_PUSH[newStatus];
+    if (pushSpec && updated.customerId !== user.sub) {
+      // Don't notify the actor about their own action.
+      void this.push.sendToUser(updated.customerId, {
+        title: pushSpec.title,
+        body: `Мастер ${pushSpec.verb} вашу заявку на «${updated.workshop.title}»`,
+        data: {
+          type: 'application.status_changed',
+          applicationId: updated.id,
+          status: newStatus,
+        },
+      });
+    }
 
     return this.serialize(updated);
   }

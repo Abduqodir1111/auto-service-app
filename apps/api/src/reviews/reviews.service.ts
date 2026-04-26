@@ -11,12 +11,16 @@ import {
   WorkshopStatus,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { PushNotificationsService } from '../devices/push-notifications.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ModerateReviewDto } from './dto/moderate-review.dto';
 
 @Injectable()
 export class ReviewsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: PushNotificationsService,
+  ) {}
 
   async listPublished(workshopId: string) {
     const reviews = await this.prisma.review.findMany({
@@ -92,6 +96,21 @@ export class ReviewsService {
         });
 
     await this.refreshWorkshopRating(dto.workshopId);
+
+    // Notify workshop owner about a new published review (only on first
+    // publish, not when the same author updates their existing one).
+    if (!existingReview) {
+      void this.push.sendToUser(workshop.ownerId, {
+        title: '⭐ Новый отзыв',
+        body: `${dto.rating}/5 на «${workshop.title}»: ${comment.slice(0, 120)}`,
+        data: {
+          type: 'review.created',
+          reviewId: review.id,
+          workshopId: workshop.id,
+        },
+      });
+    }
+
     return review;
   }
 

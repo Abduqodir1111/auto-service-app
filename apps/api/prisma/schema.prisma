@@ -90,6 +90,25 @@ model User {
   uploadedPhotos       WorkshopPhoto[] @relation("PhotoUploader")
   reports              Report[]      @relation("ReportReporter")
   moderationLogs       ModerationLog[] @relation("ModerationActor")
+  deviceTokens         DeviceToken[]
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+model DeviceToken {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @db.Uuid
+  /// Expo push token, e.g. "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
+  token     String         @unique
+  platform  DevicePlatform
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Category {

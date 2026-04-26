@@ -12,6 +12,7 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { ApplicationsModule } from './applications/applications.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AdminModule } from './admin/admin.module';
+import { DevicesModule } from './devices/devices.module';
 import { ReportsModule } from './reports/reports.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { ReportsModule } from './reports/reports.module';
     FavoritesModule,
     ApplicationsModule,
     UploadsModule,
+    DevicesModule,
     ReportsModule,
     AdminModule,
   ],
