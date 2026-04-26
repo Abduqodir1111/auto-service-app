@@ -2,20 +2,20 @@ import axios from 'axios';
 
 export const AUTH_STORAGE_KEY = 'stomvp-admin-auth';
 
-const productionApiUrl = 'http://164.90.232.78/api';
+const productionApiUrl = 'https://api.nedvigagregat.uz/api';
 
 function getDefaultApiUrl() {
   if (typeof window === 'undefined') {
     return productionApiUrl;
   }
 
-  const { hostname } = window.location;
+  const { hostname, protocol } = window.location;
 
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return productionApiUrl;
   }
 
-  return `http://${hostname}/api`;
+  return `${protocol}//${hostname}/api`;
 }
 
 export const http = axios.create({

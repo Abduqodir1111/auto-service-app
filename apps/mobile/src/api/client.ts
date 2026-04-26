@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import { NativeModules } from 'react-native';
 import { useAuthStore } from '../store/auth-store';
 
-const productionApiUrl = 'http://164.90.232.78/api';
+const productionApiUrl = 'https://api.nedvigagregat.uz/api';
 
 function resolveMetroHost() {
   const expoHost = Constants.expoConfig?.hostUri?.split(':')[0];
