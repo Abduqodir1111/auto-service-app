@@ -58,6 +58,36 @@ npm run dev:admin
 npm run dev:mobile
 ```
 
+## Тесты
+
+E2E-тесты на API живут в `apps/api/test/*.e2e-spec.ts`. Используют изолированный
+Postgres + Redis в Docker (`apps/api/test/docker-compose.test.yml`) на портах
+5435 и 6382 соответственно — никакой пересечки с локальным dev-окружением.
+
+Запуск:
+
+```bash
+# 1. Поднять test postgres + redis
+npm run test:db:up
+
+# 2. Прогнать тесты
+npm test
+
+# 3. (опционально) Снять test-стек
+npm run test:db:down
+```
+
+Покрыто:
+- **Auth flow** — request-code / verify-code / register через review-bypass
+  телефон `+998900000099` с фиксированным кодом `00000`. Login (правильный
+  пароль / неправильный пароль / неизвестный номер / заблокированный юзер).
+  `/auth/me` с токеном и без.
+- **Workshops** — публичный каталог (только APPROVED), детали по id, 404 на
+  unknown, role guards (CLIENT не может POST workshop, anon → 401).
+- **Геопоиск (PostGIS)** — без `lat/lng` старая логика; с `lat+lng` сортировка
+  по `ST_Distance` ascending, `distanceMeters` в ответе; `radius` как hard
+  cut-off; `radius=500` → 0 результатов.
+
 ## Архитектурные заметки
 
 - геолокация зарезервирована через PostGIS в PostgreSQL и поля `latitude` / `longitude`

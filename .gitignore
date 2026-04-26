@@ -18,6 +18,7 @@ yarn-error.log*
 apps/*/.env
 apps/*/.env.*
 !apps/*/.env.example
+!apps/*/.env.test
 apps/mobile/.expo
 apps/mobile/.expo-shared
 apps/*/dist

@@ -17,7 +17,11 @@
     "format": "prettier --write .",
     "prisma:generate": "npm run prisma:generate -w @stomvp/api",
     "prisma:migrate": "npm run prisma:migrate -w @stomvp/api",
-    "prisma:seed": "npm run prisma:seed -w @stomvp/api"
+    "prisma:seed": "npm run prisma:seed -w @stomvp/api",
+    "test:db:up": "npm run test:db:up -w @stomvp/api",
+    "test:db:down": "npm run test:db:down -w @stomvp/api",
+    "test:e2e": "npm run test:e2e -w @stomvp/api",
+    "test": "npm run test:e2e"
   },
   "devDependencies": {
     "concurrently": "^9.0.1",

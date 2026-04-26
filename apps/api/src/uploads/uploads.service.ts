@@ -39,6 +39,12 @@ export class UploadsService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    // Tests don't run a real S3/MinIO endpoint and never exercise upload
+    // paths; calling HeadBucket here would just hang the boot of every e2e
+    // suite. Production / dev still get the bucket created on demand.
+    if (this.configService.get<string>('NODE_ENV') === 'test') {
+      return;
+    }
     try {
       await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
     } catch {
