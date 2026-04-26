@@ -43,6 +43,13 @@ npm run prisma:migrate
 npm run prisma:seed
 ```
 
+5. (Только для prod / shared DB) Раздайте права роли API на таблицы и настройте default
+privileges, чтобы будущие миграции не упирались в `permission denied`:
+
+```bash
+sudo -u postgres psql -d stomvp -f apps/api/prisma/grants.sql
+```
+
 5. Запустите приложения:
 
 ```bash
