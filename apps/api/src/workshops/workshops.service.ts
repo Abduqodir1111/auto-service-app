@@ -38,6 +38,10 @@ export class WorkshopsService {
     request?: Request,
     user?: { sub: string; role: UserRole },
   ) {
+    if (typeof query.lat === 'number' && typeof query.lng === 'number') {
+      return this.listPublicGeo(query, request, user);
+    }
+
     const origin = getRequestOrigin(request);
     const canUseSharedCache = !user?.sub;
     const cacheKey = `${WORKSHOP_PUBLIC_CACHE_PREFIX}${origin ?? 'default'}:${JSON.stringify(query)}`;
@@ -96,6 +100,112 @@ export class WorkshopsService {
     }
 
     return payload;
+  }
+
+  private async listPublicGeo(
+    query: ListWorkshopsQueryDto,
+    request?: Request,
+    user?: { sub: string; role: UserRole },
+  ) {
+    const { page, pageSize, search, city, categoryId } = query;
+    const lat = query.lat as number;
+    const lng = query.lng as number;
+    const radius = query.radius ?? 50000;
+    const offset = (page - 1) * pageSize;
+
+    const searchPattern = search ? `%${search}%` : null;
+    const cityPattern = city ? `%${city}%` : null;
+
+    const searchFragment = searchPattern
+      ? Prisma.sql`AND (w.title ILIKE ${searchPattern} OR w.description ILIKE ${searchPattern})`
+      : Prisma.empty;
+    const cityFragment = cityPattern
+      ? Prisma.sql`AND w.city ILIKE ${cityPattern}`
+      : Prisma.empty;
+    const categoryFragment = categoryId
+      ? Prisma.sql`AND EXISTS (SELECT 1 FROM "WorkshopCategory" wc WHERE wc."workshopId" = w.id AND wc."categoryId" = ${categoryId}::uuid)`
+      : Prisma.empty;
+
+    const idRows = await this.prisma.$queryRaw<Array<{ id: string; distance_m: number }>>(Prisma.sql`
+      SELECT
+        w.id,
+        ST_Distance(
+          ST_SetSRID(ST_MakePoint(w.longitude::float8, w.latitude::float8), 4326)::geography,
+          ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography
+        )::float8 AS distance_m
+      FROM "Workshop" w
+      WHERE w.status = 'APPROVED'::"WorkshopStatus"
+        AND w.latitude IS NOT NULL
+        AND w.longitude IS NOT NULL
+        AND ST_DWithin(
+          ST_SetSRID(ST_MakePoint(w.longitude::float8, w.latitude::float8), 4326)::geography,
+          ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography,
+          ${radius}::float8
+        )
+        ${searchFragment}
+        ${cityFragment}
+        ${categoryFragment}
+      ORDER BY distance_m ASC
+      LIMIT ${pageSize}::int OFFSET ${offset}::int
+    `);
+
+    const totalRows = await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS count
+      FROM "Workshop" w
+      WHERE w.status = 'APPROVED'::"WorkshopStatus"
+        AND w.latitude IS NOT NULL
+        AND w.longitude IS NOT NULL
+        AND ST_DWithin(
+          ST_SetSRID(ST_MakePoint(w.longitude::float8, w.latitude::float8), 4326)::geography,
+          ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography,
+          ${radius}::float8
+        )
+        ${searchFragment}
+        ${cityFragment}
+        ${categoryFragment}
+    `);
+    const total = Number(totalRows[0]?.count ?? 0);
+    const origin = getRequestOrigin(request);
+
+    if (idRows.length === 0) {
+      return {
+        data: [],
+        meta: {
+          total,
+          page,
+          pageSize,
+          pageCount: Math.ceil(total / pageSize),
+        },
+      };
+    }
+
+    const ids = idRows.map((row) => row.id);
+    const distanceById = new Map(idRows.map((row) => [row.id, Number(row.distance_m)]));
+
+    const workshops = await this.prisma.workshop.findMany({
+      where: { id: { in: ids } },
+      include: this.summaryInclude(user?.sub),
+    });
+
+    const ordered = ids
+      .map((id) => workshops.find((w) => w.id === id))
+      .filter((w): w is NonNullable<typeof w> => Boolean(w));
+
+    return {
+      data: ordered.map((workshop) => {
+        const distance = distanceById.get(workshop.id);
+        return {
+          ...this.serializeSummary(workshop, origin),
+          distanceMeters: distance != null ? Math.round(distance) : null,
+        };
+      }),
+      meta: {
+        total,
+        page,
+        pageSize,
+        pageCount: Math.ceil(total / pageSize),
+      },
+    };
   }
 
   async getDetails(
