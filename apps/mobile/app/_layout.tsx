@@ -6,8 +6,18 @@ import { ActivityIndicator, View } from 'react-native';
 import { api } from '../src/api/client';
 import { colors } from '../src/constants/theme';
 import { useAuthStore } from '../src/store/auth-store';
+import {
+  getPushTokenForDevice,
+  installNotificationHandler,
+  registerPushTokenWithServer,
+} from '../src/utils/push-notifications';
 
 const queryClient = new QueryClient();
+
+// Install the foreground notification handler exactly once at module load,
+// before any component mounts — so the very first push received in this
+// process surfaces a banner.
+installNotificationHandler();
 
 export default function RootLayout() {
   const hydrated = useAuthStore((state) => state.hydrated);
@@ -64,6 +74,25 @@ export default function RootLayout() {
       cancelled = true;
     };
   }, [hydrated, session?.accessToken, setSession]);
+
+  // Register this device's Expo push token with the backend whenever the
+  // user is logged in. Re-runs on session change (e.g. relogin as a
+  // different user) so each user gets their own tokens on the server.
+  useEffect(() => {
+    const accessToken = session?.accessToken;
+    if (!hydrated || !accessToken) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const token = await getPushTokenForDevice();
+      if (cancelled || !token) return;
+      await registerPushTokenWithServer(token);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, session?.accessToken, session?.user?.id]);
 
   if (!hydrated) {
     return (

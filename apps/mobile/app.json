@@ -59,6 +59,13 @@
         {
           "locationWhenInUsePermission": "MasterTop определяет вашу геопозицию, чтобы показать ближайшие объявления на карте."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#F4934A",
+          "defaultChannel": "default"
+        }
       ]
     ],
     "experiments": {
