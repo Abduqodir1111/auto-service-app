@@ -9,13 +9,21 @@ function getDefaultApiUrl() {
     return productionApiUrl;
   }
 
-  const { hostname, protocol } = window.location;
+  const { hostname } = window.location;
 
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return productionApiUrl;
   }
 
-  return `${protocol}//${hostname}/api`;
+  if (
+    hostname === 'admin.nedvigagregat.uz' ||
+    hostname === 'nedvigagregat.uz' ||
+    hostname === 'www.nedvigagregat.uz'
+  ) {
+    return productionApiUrl;
+  }
+
+  return `${window.location.protocol}//${hostname}/api`;
 }
 
 export const http = axios.create({

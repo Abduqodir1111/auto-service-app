@@ -1,4 +1,15 @@
-import { ApplicationStatus, PhotoStatus, ReviewStatus, ServiceCategory, UserRole, WorkshopStatus } from '@stomvp/shared';
+import {
+  ApplicationStatus,
+  ModerationAction,
+  ModerationEntityType,
+  PhotoStatus,
+  ReportStatus,
+  ReportTargetType,
+  ReviewStatus,
+  ServiceCategory,
+  UserRole,
+  WorkshopStatus,
+} from '@stomvp/shared';
 
 export type AdminUser = {
   id: string;
@@ -7,6 +18,7 @@ export type AdminUser = {
   email?: string | null;
   role: UserRole;
   isBlocked: boolean;
+  isVerifiedMaster: boolean;
   createdAt: string;
 };
 
@@ -17,6 +29,7 @@ export type AdminAnalytics = {
   pendingWorkshops: number;
   pendingReviews: number;
   pendingPhotos: number;
+  pendingReports: number;
   totalApplications: number;
 };
 
@@ -28,10 +41,12 @@ export type AdminWorkshop = {
   addressLine: string;
   status: WorkshopStatus;
   rejectionReason?: string | null;
+  isVerifiedMaster: boolean;
   owner: {
     id: string;
     fullName: string;
     phone: string;
+    isVerifiedMaster?: boolean;
   };
   categories: ServiceCategory[];
   services: Array<{
@@ -44,6 +59,7 @@ export type AdminWorkshop = {
     id: string;
     url: string;
     status: PhotoStatus;
+    isPrimary: boolean;
   }>;
 };
 
@@ -67,6 +83,7 @@ export type AdminPhoto = {
   id: string;
   url: string;
   status: PhotoStatus;
+  isPrimary: boolean;
   createdAt: string;
   workshop: {
     id: string;
@@ -90,6 +107,62 @@ export type AdminApplication = {
   workshop?: {
     id: string;
     title: string;
+    phone: string;
+  } | null;
+};
+
+export type AdminReport = {
+  id: string;
+  reporterId?: string | null;
+  targetType: ReportTargetType;
+  targetId: string;
+  reason: string;
+  comment?: string | null;
+  status: ReportStatus;
+  resolution?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  reporter?: {
+    id: string;
+    fullName: string;
+    phone: string;
+  } | null;
+  target?: {
+    id: string;
+    title: string;
+    type: ReportTargetType;
+    status?: string;
+    comment?: string;
+    owner?: {
+      id: string;
+      fullName: string;
+      phone: string;
+    };
+    workshop?: {
+      id: string;
+      title: string;
+    };
+    author?: {
+      id: string;
+      fullName: string;
+    };
+  } | null;
+};
+
+export type AdminModerationLog = {
+  id: string;
+  actorId?: string | null;
+  entityType: ModerationEntityType;
+  entityId: string;
+  action: ModerationAction;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+  note?: string | null;
+  metadata?: unknown;
+  createdAt: string;
+  actor?: {
+    id: string;
+    fullName: string;
     phone: string;
   } | null;
 };

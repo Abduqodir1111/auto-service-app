@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WorkshopSummary } from '@stomvp/shared';
+import { getCategoryIcon } from '../src/constants/category-meta';
 import { colors } from '../src/constants/theme';
 
 type Props = {
@@ -106,6 +107,11 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
       <View style={styles.chips}>
         {workshop.categories.slice(0, 3).map((category) => (
           <View key={category.id} style={styles.chip}>
+            <Ionicons
+              name={getCategoryIcon(category.slug)}
+              size={13}
+              color={colors.success}
+            />
             <Text style={styles.chipText}>{category.name}</Text>
           </View>
         ))}
@@ -245,6 +251,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: '#EAF4F1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   chipText: {
     color: colors.success,

@@ -44,7 +44,7 @@ export class SmsAuthService {
       'https://devsms.uz/api',
     );
     this.providerToken = this.configService.get<string>('DEVSMS_API_TOKEN');
-    this.serviceName = this.configService.get<string>('SMS_SERVICE_NAME', 'STOMVP');
+    this.serviceName = this.configService.get<string>('SMS_SERVICE_NAME', 'MasterTop');
     this.otpTtlSeconds = this.configService.get<number>('SMS_OTP_TTL_SECONDS', 300);
     this.resendSeconds = this.configService.get<number>('SMS_OTP_RESEND_SECONDS', 60);
     this.maxAttempts = this.configService.get<number>('SMS_OTP_MAX_ATTEMPTS', 5);

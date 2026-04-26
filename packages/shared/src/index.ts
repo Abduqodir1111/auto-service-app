@@ -31,6 +31,38 @@ export enum PhotoStatus {
   REJECTED = 'REJECTED',
 }
 
+export enum ReportTargetType {
+  WORKSHOP = 'WORKSHOP',
+  PHOTO = 'PHOTO',
+  REVIEW = 'REVIEW',
+}
+
+export enum ReportStatus {
+  NEW = 'NEW',
+  IN_REVIEW = 'IN_REVIEW',
+  RESOLVED = 'RESOLVED',
+  REJECTED = 'REJECTED',
+}
+
+export enum ModerationEntityType {
+  USER = 'USER',
+  WORKSHOP = 'WORKSHOP',
+  PHOTO = 'PHOTO',
+  REVIEW = 'REVIEW',
+  REPORT = 'REPORT',
+}
+
+export enum ModerationAction {
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  BLOCKED = 'BLOCKED',
+  UPDATED = 'UPDATED',
+  VERIFIED = 'VERIFIED',
+  UNVERIFIED = 'UNVERIFIED',
+  RESOLVED = 'RESOLVED',
+  DELETED = 'DELETED',
+}
+
 export type PaginatedResult<T> = {
   data: T[];
   meta: {
@@ -48,6 +80,7 @@ export type AuthUser = {
   email?: string | null;
   role: UserRole;
   isBlocked: boolean;
+  isVerifiedMaster: boolean;
   createdAt: string;
 };
 
@@ -96,6 +129,7 @@ export type WorkshopSummary = {
   reviewsCount: number;
   favoritesCount: number;
   isFavorite?: boolean;
+  isVerifiedMaster: boolean;
   createdAt: string;
   categories: ServiceCategory[];
   photos: WorkshopPhoto[];
@@ -130,4 +164,17 @@ export type ApplicationItem = {
   preferredDate?: string | null;
   status: ApplicationStatus;
   createdAt: string;
+};
+
+export type ReportItem = {
+  id: string;
+  reporterId?: string | null;
+  targetType: ReportTargetType;
+  targetId: string;
+  reason: string;
+  comment?: string | null;
+  status: ReportStatus;
+  resolution?: string | null;
+  createdAt: string;
+  updatedAt: string;
 };

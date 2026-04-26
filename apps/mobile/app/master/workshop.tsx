@@ -24,6 +24,7 @@ import { PhotoStatus, ServiceCategory, WorkshopDetails, WorkshopStatus } from '@
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
+import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
 import { useMapPickerStore } from '../../src/store/map-picker-store';
 import { getDefaultMapCoordinates, openExternalMap } from '../../src/utils/maps';
@@ -664,6 +665,11 @@ export default function WorkshopEditorScreen() {
                 }
                 style={[styles.categoryChip, active && styles.categoryChipActive]}
               >
+                <Ionicons
+                  name={getCategoryIcon(category.slug)}
+                  size={16}
+                  color={active ? colors.success : colors.text}
+                />
                 <Text style={[styles.categoryText, active && styles.categoryTextActive]}>
                   {category.name}
                 </Text>
@@ -945,6 +951,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   categoryChipActive: {
     borderColor: colors.success,

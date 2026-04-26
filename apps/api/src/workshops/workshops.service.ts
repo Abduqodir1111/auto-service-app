@@ -4,8 +4,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PhotoStatus, Prisma, ReviewStatus, WorkshopStatus } from '@prisma/client';
-import { PhotoStatus as ApiPhotoStatus, UserRole } from '@stomvp/shared';
+import {
+  ModerationAction,
+  ModerationEntityType,
+  PhotoStatus,
+  Prisma,
+  ReviewStatus,
+  WorkshopStatus,
+} from '@prisma/client';
+import { UserRole } from '@stomvp/shared';
 import { Request } from 'express';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -26,10 +33,15 @@ export class WorkshopsService {
     private readonly uploadsService: UploadsService,
   ) {}
 
-  async listPublic(query: ListWorkshopsQueryDto, request?: Request) {
+  async listPublic(
+    query: ListWorkshopsQueryDto,
+    request?: Request,
+    user?: { sub: string; role: UserRole },
+  ) {
     const origin = getRequestOrigin(request);
+    const canUseSharedCache = !user?.sub;
     const cacheKey = `${WORKSHOP_PUBLIC_CACHE_PREFIX}${origin ?? 'default'}:${JSON.stringify(query)}`;
-    const cached = await this.redisService.getJson(cacheKey);
+    const cached = canUseSharedCache ? await this.redisService.getJson(cacheKey) : null;
 
     if (cached) {
       return cached;
@@ -64,7 +76,7 @@ export class WorkshopsService {
         orderBy: [{ favoritesCount: 'desc' }, { createdAt: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: this.summaryInclude(),
+        include: this.summaryInclude(user?.sub),
       }),
       this.prisma.workshop.count({ where }),
     ]);
@@ -79,7 +91,10 @@ export class WorkshopsService {
       },
     };
 
-    await this.redisService.setJson(cacheKey, payload, 60);
+    if (canUseSharedCache) {
+      await this.redisService.setJson(cacheKey, payload, 60);
+    }
+
     return payload;
   }
 
@@ -344,24 +359,61 @@ export class WorkshopsService {
     return updated;
   }
 
-  async moderate(id: string, dto: ModerateWorkshopDto) {
+  async moderate(id: string, dto: ModerateWorkshopDto, actorId?: string) {
     const workshop = await this.prisma.workshop.findUnique({ where: { id } });
 
     if (!workshop) {
       throw new NotFoundException('Workshop not found');
     }
 
-    const updated = await this.prisma.workshop.update({
-      where: { id },
-      data: {
-        status: WorkshopStatus[dto.status as keyof typeof WorkshopStatus],
-        rejectionReason: dto.rejectionReason ?? null,
-      },
-    });
+    const nextStatus = WorkshopStatus[dto.status as keyof typeof WorkshopStatus];
+    const action =
+      dto.status === WorkshopStatus.APPROVED
+        ? ModerationAction.APPROVED
+        : dto.status === WorkshopStatus.REJECTED
+          ? ModerationAction.REJECTED
+          : dto.status === WorkshopStatus.BLOCKED
+            ? ModerationAction.BLOCKED
+            : ModerationAction.UPDATED;
 
-    if (dto.status === WorkshopStatus.APPROVED && dto.approvePendingPhotos) {
-      await this.uploadsService.moderatePendingForWorkshop(id, ApiPhotoStatus.APPROVED);
-    }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const nextWorkshop = await tx.workshop.update({
+        where: { id },
+        data: {
+          status: nextStatus,
+          rejectionReason: dto.rejectionReason ?? null,
+        },
+      });
+
+      if (dto.status === WorkshopStatus.APPROVED && dto.approvePendingPhotos) {
+        await tx.workshopPhoto.updateMany({
+          where: {
+            workshopId: id,
+            status: PhotoStatus.PENDING,
+          },
+          data: {
+            status: PhotoStatus.APPROVED,
+          },
+        });
+      }
+
+      await tx.moderationLog.create({
+        data: {
+          actorId,
+          entityType: ModerationEntityType.WORKSHOP,
+          entityId: id,
+          action,
+          fromStatus: workshop.status,
+          toStatus: nextStatus,
+          note: dto.rejectionReason?.trim() || null,
+          metadata: {
+            approvePendingPhotos: Boolean(dto.approvePendingPhotos),
+          },
+        },
+      });
+
+      return nextWorkshop;
+    });
 
     await this.invalidatePublicCache();
     return updated;
@@ -426,11 +478,16 @@ export class WorkshopsService {
     return workshops.map((workshop) => this.serializeDetails(workshop));
   }
 
-  private summaryInclude() {
+  private summaryInclude(userId?: string) {
     return {
       categories: {
         include: {
           category: true,
+        },
+      },
+      owner: {
+        select: {
+          isVerifiedMaster: true,
         },
       },
       photos: {
@@ -439,6 +496,13 @@ export class WorkshopsService {
         },
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
       },
+      favorites: userId
+        ? {
+            where: { userId },
+            select: { id: true },
+            take: 1,
+          }
+        : false,
     } satisfies Prisma.WorkshopInclude;
   }
 
@@ -491,7 +555,13 @@ export class WorkshopsService {
       averageRating: Number(workshop.averageRating ?? 0),
       reviewsCount: workshop.reviewsCount,
       favoritesCount: workshop.favoritesCount,
-      isFavorite: workshop.isFavorite,
+      isFavorite:
+        typeof workshop.isFavorite === 'boolean'
+          ? workshop.isFavorite
+          : Array.isArray(workshop.favorites)
+            ? workshop.favorites.length > 0
+            : false,
+      isVerifiedMaster: Boolean(workshop.owner?.isVerifiedMaster),
       createdAt: workshop.createdAt.toISOString(),
       categories: workshop.categories.map(({ category }: any) => ({
         id: category.id,
@@ -527,6 +597,7 @@ export class WorkshopsService {
         email: workshop.owner.email,
         role: workshop.owner.role,
         isBlocked: workshop.owner.isBlocked,
+        isVerifiedMaster: workshop.owner.isVerifiedMaster,
         createdAt: workshop.owner.createdAt.toISOString(),
       },
       reviews: (workshop.reviews ?? []).map((review: any) => ({

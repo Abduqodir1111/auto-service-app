@@ -6,7 +6,7 @@ export function AppLogo() {
         <div className="app-logo__pin">+</div>
       </div>
       <div className="app-logo__copy">
-        <strong>STOMVP</strong>
+        <strong>MasterTop</strong>
         <span>Поиск СТО рядом</span>
       </div>
     </div>

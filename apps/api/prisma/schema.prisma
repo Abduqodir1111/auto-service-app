@@ -40,6 +40,38 @@ enum PhotoStatus {
   REJECTED
 }
 
+enum ReportTargetType {
+  WORKSHOP
+  PHOTO
+  REVIEW
+}
+
+enum ReportStatus {
+  NEW
+  IN_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum ModerationEntityType {
+  USER
+  WORKSHOP
+  PHOTO
+  REVIEW
+  REPORT
+}
+
+enum ModerationAction {
+  APPROVED
+  REJECTED
+  BLOCKED
+  UPDATED
+  VERIFIED
+  UNVERIFIED
+  RESOLVED
+  DELETED
+}
+
 model User {
   id                   String        @id @default(uuid()) @db.Uuid
   fullName             String
@@ -48,6 +80,7 @@ model User {
   passwordHash         String
   role                 UserRole      @default(CLIENT)
   isBlocked            Boolean       @default(false)
+  isVerifiedMaster     Boolean       @default(false)
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
   workshops            Workshop[]    @relation("WorkshopOwner")
@@ -55,6 +88,8 @@ model User {
   reviews              Review[]      @relation("ReviewAuthor")
   customerApplications Application[] @relation("CustomerApplications")
   uploadedPhotos       WorkshopPhoto[] @relation("PhotoUploader")
+  reports              Report[]      @relation("ReportReporter")
+  moderationLogs       ModerationLog[] @relation("ModerationActor")
 }
 
 model Category {
@@ -184,4 +219,40 @@ model Application {
 
   @@index([customerId])
   @@index([workshopId, status])
+}
+
+model Report {
+  id         String           @id @default(uuid()) @db.Uuid
+  reporterId String?         @db.Uuid
+  targetType ReportTargetType
+  targetId   String          @db.Uuid
+  reason     String
+  comment    String?
+  status     ReportStatus    @default(NEW)
+  resolution String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  reporter   User?           @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@index([reporterId])
+}
+
+model ModerationLog {
+  id         String               @id @default(uuid()) @db.Uuid
+  actorId    String?              @db.Uuid
+  entityType ModerationEntityType
+  entityId   String               @db.Uuid
+  action     ModerationAction
+  fromStatus String?
+  toStatus   String?
+  note       String?
+  metadata   Json?
+  createdAt  DateTime             @default(now())
+  actor      User?                @relation("ModerationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
 }

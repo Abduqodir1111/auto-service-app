@@ -43,6 +43,7 @@ export function DashboardPage() {
             hint="Ждут подтверждения"
           />
           <StatCard label="Фото" value={data.pendingPhotos} hint="На ручной проверке" />
+          <StatCard label="Жалобы" value={data.pendingReports} hint="Новые сигналы доверия" />
           <StatCard
             label="Заявки"
             value={data.totalApplications}

@@ -93,13 +93,19 @@ export class WorkshopsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Patch('admin/:id/moderate')
-  moderate(@Param('id') id: string, @Body() dto: ModerateWorkshopDto) {
-    return this.workshopsService.moderate(id, dto);
+  moderate(
+    @Param('id') id: string,
+    @Body() dto: ModerateWorkshopDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.workshopsService.moderate(id, dto, user.sub);
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
   list(@Query() query: ListWorkshopsQueryDto, @Req() request: Request) {
-    return this.workshopsService.listPublic(query, request);
+    const actor = (request as Request & { user?: JwtUser }).user;
+    return this.workshopsService.listPublic(query, request, actor);
   }
 
   @UseGuards(OptionalJwtAuthGuard)

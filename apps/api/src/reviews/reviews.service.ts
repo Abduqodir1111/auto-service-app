@@ -4,7 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ReviewStatus, WorkshopStatus } from '@prisma/client';
+import {
+  ModerationAction,
+  ModerationEntityType,
+  ReviewStatus,
+  WorkshopStatus,
+} from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ModerateReviewDto } from './dto/moderate-review.dto';
@@ -119,18 +124,41 @@ export class ReviewsService {
     }));
   }
 
-  async moderate(id: string, dto: ModerateReviewDto) {
+  async moderate(id: string, dto: ModerateReviewDto, actorId?: string) {
     const review = await this.prisma.review.findUnique({ where: { id } });
 
     if (!review) {
       throw new NotFoundException('Review not found');
     }
 
-    const updated = await this.prisma.review.update({
-      where: { id },
-      data: {
-        status: ReviewStatus[dto.status as keyof typeof ReviewStatus],
-      },
+    const nextStatus = ReviewStatus[dto.status as keyof typeof ReviewStatus];
+    const action =
+      dto.status === ReviewStatus.PUBLISHED
+        ? ModerationAction.APPROVED
+        : dto.status === ReviewStatus.REJECTED
+          ? ModerationAction.REJECTED
+          : ModerationAction.UPDATED;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const nextReview = await tx.review.update({
+        where: { id },
+        data: {
+          status: nextStatus,
+        },
+      });
+
+      await tx.moderationLog.create({
+        data: {
+          actorId,
+          entityType: ModerationEntityType.REVIEW,
+          entityId: id,
+          action,
+          fromStatus: review.status,
+          toStatus: nextStatus,
+        },
+      });
+
+      return nextReview;
     });
 
     await this.refreshWorkshopRating(updated.workshopId);

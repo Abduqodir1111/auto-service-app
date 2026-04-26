@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
   ParseFilePipeBuilder,
+  Patch,
   Post,
   Query,
   Req,
@@ -111,5 +113,25 @@ export class UploadsController {
       user,
       getRequestOrigin(request),
     );
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MASTER, UserRole.ADMIN)
+  @Patch('photos/:id/primary')
+  setPrimaryPhoto(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtUser,
+    @Req() request: Request,
+  ) {
+    return this.uploadsService.setPrimaryPhoto(id, user, getRequestOrigin(request));
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MASTER, UserRole.ADMIN)
+  @Delete('photos/:id')
+  deletePhoto(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.uploadsService.deletePhoto(id, user);
   }
 }

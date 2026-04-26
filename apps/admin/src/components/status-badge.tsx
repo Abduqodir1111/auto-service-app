@@ -16,6 +16,16 @@ const statusLabels: Record<string, string> = {
   IN_PROGRESS: 'В работе',
   COMPLETED: 'Завершена',
   CANCELLED: 'Отменена',
+  IN_REVIEW: 'В работе',
+  RESOLVED: 'Решена',
+  WORKSHOP: 'Объявление',
+  PHOTO: 'Фото',
+  REVIEW: 'Отзыв',
+  USER: 'Пользователь',
+  VERIFIED: 'Проверен',
+  UNVERIFIED: 'Без бейджа',
+  UPDATED: 'Обновлено',
+  DELETED: 'Удалено',
 };
 
 export function StatusBadge({ tone, children }: Props) {

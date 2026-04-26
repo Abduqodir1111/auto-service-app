@@ -18,6 +18,7 @@ import { WebView } from 'react-native-webview';
 import { PaginatedResult, ServiceCategory, WorkshopSummary } from '@stomvp/shared';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
+import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
 import { createWorkshopsLeafletHtml } from '../../src/utils/leaflet-html';
 import { getDefaultMapCoordinates } from '../../src/utils/maps';
@@ -28,16 +29,6 @@ const filterPalettes = [
   { background: '#FFF7DD', badge: '#FFECB2', border: '#EEDDAB', icon: colors.warning },
   { background: '#EEF2FF', badge: '#DCE4FF', border: '#CFD9FA', icon: '#4862C5' },
 ];
-
-const categoryIconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
-  diagnostics: 'speedometer-outline',
-  suspension: 'car-sport-outline',
-  electrics: 'flash-outline',
-  engine: 'construct-outline',
-  'body-repair': 'hammer-outline',
-  'tire-service': 'disc-outline',
-  'oil-service': 'water-outline',
-};
 
 type MapMessage =
   | {
@@ -307,7 +298,7 @@ export default function MapTabScreen() {
                 ]}
               >
                 <Ionicons
-                  name={categoryIconMap[category.slug] ?? 'sparkles-outline'}
+                  name={getCategoryIcon(category.slug)}
                   size={18}
                   color={active ? '#FFFFFF' : palette.icon}
                 />

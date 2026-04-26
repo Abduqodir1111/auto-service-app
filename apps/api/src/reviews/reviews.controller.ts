@@ -38,7 +38,7 @@ export class ReviewsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Patch('admin/:id/moderate')
-  moderate(@Param('id') id: string, @Body() dto: ModerateReviewDto) {
-    return this.reviewsService.moderate(id, dto);
+  moderate(@Param('id') id: string, @Body() dto: ModerateReviewDto, @CurrentUser() user: JwtUser) {
+    return this.reviewsService.moderate(id, dto, user.sub);
   }
 }

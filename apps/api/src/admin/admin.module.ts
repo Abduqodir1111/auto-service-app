@@ -3,11 +3,12 @@ import { ApplicationsModule } from '../applications/applications.module';
 import { ReviewsModule } from '../reviews/reviews.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { WorkshopsModule } from '../workshops/workshops.module';
+import { ReportsModule } from '../reports/reports.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
 @Module({
-  imports: [WorkshopsModule, ReviewsModule, UploadsModule, ApplicationsModule],
+  imports: [WorkshopsModule, ReviewsModule, UploadsModule, ApplicationsModule, ReportsModule],
   controllers: [AdminController],
   providers: [AdminService],
 })

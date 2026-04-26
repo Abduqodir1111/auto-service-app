@@ -14,13 +14,16 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { PhotoStatus } from '@prisma/client';
+import { ModerationAction, ModerationEntityType, PhotoStatus } from '@prisma/client';
 import { PhotoStatus as ApiPhotoStatus, UserRole } from '@stomvp/shared';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { S3_CLIENT } from './uploads.constants';
 import { buildUploadsProxyUrl } from './uploads.utils';
+
+const WORKSHOP_PUBLIC_CACHE_PREFIX = 'workshops:public:';
 
 @Injectable()
 export class UploadsService implements OnModuleInit {
@@ -30,6 +33,7 @@ export class UploadsService implements OnModuleInit {
     @Inject(S3_CLIENT) private readonly s3: S3Client,
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly redisService: RedisService,
   ) {
     this.bucket = this.configService.getOrThrow<string>('S3_BUCKET');
   }
@@ -85,9 +89,99 @@ export class UploadsService implements OnModuleInit {
       },
     });
 
+    await this.invalidatePublicCache();
+
     return {
       ...photo,
       url: this.getPublicUrl(photo.key, origin),
+    };
+  }
+
+  async setPrimaryPhoto(
+    id: string,
+    user: { sub: string; role: UserRole },
+    origin?: string,
+  ) {
+    const photo = await this.prisma.workshopPhoto.findUnique({
+      where: { id },
+      include: { workshop: true },
+    });
+
+    if (!photo) {
+      throw new NotFoundException('Photo not found');
+    }
+
+    this.assertCanManagePhoto(photo.workshop.ownerId, user);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.workshopPhoto.updateMany({
+        where: { workshopId: photo.workshopId },
+        data: { isPrimary: false },
+      });
+
+      return tx.workshopPhoto.update({
+        where: { id },
+        data: { isPrimary: true },
+      });
+    });
+
+    await this.invalidatePublicCache();
+
+    return {
+      ...updated,
+      url: this.getPublicUrl(updated.key, origin),
+    };
+  }
+
+  async deletePhoto(id: string, user: { sub: string; role: UserRole }) {
+    const photo = await this.prisma.workshopPhoto.findUnique({
+      where: { id },
+      include: { workshop: true },
+    });
+
+    if (!photo) {
+      throw new NotFoundException('Photo not found');
+    }
+
+    this.assertCanManagePhoto(photo.workshop.ownerId, user);
+
+    const replacement = await this.prisma.$transaction(async (tx) => {
+      await tx.workshopPhoto.delete({ where: { id } });
+
+      if (!photo.isPrimary) {
+        return null;
+      }
+
+      const nextPhoto =
+        (await tx.workshopPhoto.findFirst({
+          where: {
+            workshopId: photo.workshopId,
+            status: { not: PhotoStatus.REJECTED },
+          },
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+        })) ??
+        (await tx.workshopPhoto.findFirst({
+          where: { workshopId: photo.workshopId },
+          orderBy: { createdAt: 'desc' },
+        }));
+
+      if (!nextPhoto) {
+        return null;
+      }
+
+      return tx.workshopPhoto.update({
+        where: { id: nextPhoto.id },
+        data: { isPrimary: true },
+      });
+    });
+
+    await this.deleteFiles([photo.key]);
+    await this.invalidatePublicCache();
+
+    return {
+      id,
+      deleted: true,
+      primaryPhotoId: replacement?.id ?? null,
     };
   }
 
@@ -107,17 +201,41 @@ export class UploadsService implements OnModuleInit {
     }));
   }
 
-  async moderate(id: string, status: ApiPhotoStatus, origin?: string) {
+  async moderate(id: string, status: ApiPhotoStatus, origin?: string, actorId?: string) {
     const photo = await this.prisma.workshopPhoto.findUnique({ where: { id } });
 
     if (!photo) {
       throw new NotFoundException('Photo not found');
     }
 
-    const updated = await this.prisma.workshopPhoto.update({
-      where: { id },
-      data: { status: PhotoStatus[status as keyof typeof PhotoStatus] },
+    const nextStatus = PhotoStatus[status as keyof typeof PhotoStatus];
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const nextPhoto = await tx.workshopPhoto.update({
+        where: { id },
+        data: { status: nextStatus },
+      });
+
+      await tx.moderationLog.create({
+        data: {
+          actorId,
+          entityType: ModerationEntityType.PHOTO,
+          entityId: id,
+          action:
+            status === ApiPhotoStatus.APPROVED
+              ? ModerationAction.APPROVED
+              : ModerationAction.REJECTED,
+          fromStatus: photo.status,
+          toStatus: nextStatus,
+          metadata: {
+            workshopId: photo.workshopId,
+          },
+        },
+      });
+
+      return nextPhoto;
     });
+
+    await this.invalidatePublicCache();
 
     return {
       ...updated,
@@ -175,5 +293,17 @@ export class UploadsService implements OnModuleInit {
 
     const endpoint = this.configService.get<string>('S3_ENDPOINT');
     return `${endpoint?.replace(/\/$/, '')}/${this.bucket}/${key}`;
+  }
+
+  private assertCanManagePhoto(ownerId: string, user: { sub: string; role: UserRole }) {
+    if (user.role === UserRole.ADMIN || ownerId === user.sub) {
+      return;
+    }
+
+    throw new ForbiddenException('You cannot manage this photo');
+  }
+
+  private async invalidatePublicCache() {
+    await this.redisService.deleteByPrefix(WORKSHOP_PUBLIC_CACHE_PREFIX);
   }
 }

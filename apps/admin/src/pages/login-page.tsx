@@ -48,7 +48,7 @@ export function LoginPage() {
       <section className="login-card panel">
         <div>
           <AppLogo />
-          <p className="eyebrow">STOMVP</p>
+          <p className="eyebrow">MasterTop</p>
           <h1>Админ-панель сервиса для СТО</h1>
           <p className="muted">
             Используйте seeded-аккаунт администратора или свои admin-данные из базы.

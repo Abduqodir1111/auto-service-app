@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { UserRole } from '@stomvp/shared';
 import { AdminUser } from '../api/types';
 import { http } from '../api/http';
 import { StatusBadge } from '../components/status-badge';
@@ -25,6 +26,21 @@ export function UsersPage() {
     },
   });
 
+  const toggleVerifiedMaster = useMutation({
+    mutationFn: async (payload: { id: string; isVerifiedMaster: boolean }) => {
+      await http.patch(`/admin/users/${payload.id}/verify-master`, {
+        isVerifiedMaster: payload.isVerifiedMaster,
+      });
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'workshops'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'moderation-history'] }),
+      ]);
+    },
+  });
+
   return (
     <section className="page">
       <header className="page__header">
@@ -46,6 +62,7 @@ export function UsersPage() {
                 <th>Роль</th>
                 <th>Дата</th>
                 <th>Статус</th>
+                <th>Доверие</th>
                 <th></th>
               </tr>
             </thead>
@@ -62,17 +79,43 @@ export function UsersPage() {
                     </StatusBadge>
                   </td>
                   <td>
-                    <button
-                      className="button button--ghost"
-                      onClick={() =>
-                        toggleBlock.mutate({
-                          id: user.id,
-                          isBlocked: !user.isBlocked,
-                        })
-                      }
-                    >
-                      {user.isBlocked ? 'Разблокировать' : 'Заблокировать'}
-                    </button>
+                    {user.role === UserRole.MASTER ? (
+                      <StatusBadge tone={user.isVerifiedMaster ? 'success' : 'neutral'}>
+                        {user.isVerifiedMaster ? 'Проверенный мастер' : 'Без бейджа'}
+                      </StatusBadge>
+                    ) : (
+                      <span className="muted">Не мастер</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="actions">
+                      {user.role === UserRole.MASTER ? (
+                        <button
+                          className="button button--ghost"
+                          disabled={toggleVerifiedMaster.isPending}
+                          onClick={() =>
+                            toggleVerifiedMaster.mutate({
+                              id: user.id,
+                              isVerifiedMaster: !user.isVerifiedMaster,
+                            })
+                          }
+                        >
+                          {user.isVerifiedMaster ? 'Снять бейдж' : 'Дать бейдж'}
+                        </button>
+                      ) : null}
+                      <button
+                        className="button button--ghost"
+                        disabled={toggleBlock.isPending}
+                        onClick={() =>
+                          toggleBlock.mutate({
+                            id: user.id,
+                            isBlocked: !user.isBlocked,
+                          })
+                        }
+                      >
+                        {user.isBlocked ? 'Разблокировать' : 'Заблокировать'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -7,6 +7,12 @@ import { AdminWorkshop } from '../api/types';
 import { StatusBadge } from '../components/status-badge';
 import { formatPriceRange } from '../lib/format';
 
+const photoStatusLabels: Record<PhotoStatus, string> = {
+  [PhotoStatus.PENDING]: 'На проверке',
+  [PhotoStatus.APPROVED]: 'Одобрено',
+  [PhotoStatus.REJECTED]: 'Отклонено',
+};
+
 export function WorkshopsPage() {
   const queryClient = useQueryClient();
   const [rejectionReason, setRejectionReason] = useState<Record<string, string>>({});
@@ -62,14 +68,58 @@ export function WorkshopsPage() {
     },
   });
 
+  const photoAction = useMutation({
+    mutationFn: async (payload: {
+      workshopId: string;
+      photoId: string;
+      action: 'delete' | 'primary';
+    }) => {
+      if (payload.action === 'delete') {
+        await http.delete(`/uploads/photos/${payload.photoId}`);
+      } else {
+        await http.patch(`/uploads/photos/${payload.photoId}/primary`);
+      }
+
+      return payload;
+    },
+    onSuccess: (payload) => {
+      queryClient.setQueryData<AdminWorkshop[]>(['admin', 'workshops'], (current) =>
+        (current ?? []).map((item) => {
+          if (item.id !== payload.workshopId) {
+            return item;
+          }
+
+          return {
+            ...item,
+            photos:
+              payload.action === 'delete'
+                ? item.photos.filter((photo) => photo.id !== payload.photoId)
+                : item.photos.map((photo) => ({
+                    ...photo,
+                    isPrimary: photo.id === payload.photoId,
+                  })),
+          };
+        }),
+      );
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'workshops'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'photos'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'analytics'] });
+    },
+  });
+
   const mutationError =
-    moderate.isError && axios.isAxiosError(moderate.error)
-      ? typeof moderate.error.response?.data?.message === 'string'
-        ? moderate.error.response?.data?.message
-        : Array.isArray(moderate.error.response?.data?.message)
-          ? moderate.error.response?.data?.message.join(', ')
+    [moderate.error, photoAction.error].find((error) => axios.isAxiosError(error));
+
+  const mutationErrorText =
+    mutationError && axios.isAxiosError(mutationError)
+      ? typeof mutationError.response?.data?.message === 'string'
+        ? mutationError.response?.data?.message
+        : Array.isArray(mutationError.response?.data?.message)
+          ? mutationError.response?.data?.message.join(', ')
         : 'Не удалось изменить статус карточки.'
       : null;
+
+  const isActionPending = moderate.isPending || photoAction.isPending;
 
   const orderedWorkshops = useMemo(() => {
     if (!data) {
@@ -97,7 +147,7 @@ export function WorkshopsPage() {
       </header>
 
       <div className="stack">
-        {mutationError ? <div className="alert">{mutationError}</div> : null}
+        {mutationErrorText ? <div className="alert">{mutationErrorText}</div> : null}
         {isLoading || !data ? (
           <div className="panel">Загружаем мастерские...</div>
         ) : orderedWorkshops.length === 0 ? (
@@ -136,9 +186,63 @@ export function WorkshopsPage() {
                 Владелец: {workshop.owner.fullName} • {workshop.owner.phone}
               </p>
 
+              <div className="actions">
+                <StatusBadge tone={workshop.isVerifiedMaster ? 'success' : 'neutral'}>
+                  {workshop.isVerifiedMaster ? 'Проверенный мастер' : 'Мастер без бейджа'}
+                </StatusBadge>
+              </div>
+
               <p className="muted">
                 Фото на проверке: {pendingPhotosCount} • Всего фото: {workshop.photos.length}
               </p>
+
+              {workshop.photos.length ? (
+                <div className="workshop-photo-strip">
+                  {workshop.photos.map((photo) => (
+                    <div className="workshop-photo" key={photo.id}>
+                      <img alt={workshop.title} src={photo.url} />
+                      <div className="workshop-photo__meta">
+                        <span>{photoStatusLabels[photo.status]}</span>
+                        {photo.isPrimary ? <strong>Главное</strong> : null}
+                      </div>
+                      <div className="actions">
+                        <button
+                          className="button button--ghost button--small"
+                          disabled={photo.isPrimary || isActionPending}
+                          onClick={() => {
+                            photoAction.reset();
+                            photoAction.mutate({
+                              workshopId: workshop.id,
+                              photoId: photo.id,
+                              action: 'primary',
+                            });
+                          }}
+                        >
+                          Главное
+                        </button>
+                        <button
+                          className="button button--danger button--small"
+                          disabled={isActionPending}
+                          onClick={() => {
+                            if (!window.confirm('Удалить это фото с сервера?')) {
+                              return;
+                            }
+
+                            photoAction.reset();
+                            photoAction.mutate({
+                              workshopId: workshop.id,
+                              photoId: photo.id,
+                              action: 'delete',
+                            });
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="chips">
                 {workshop.categories.map((category) => (
@@ -178,7 +282,7 @@ export function WorkshopsPage() {
               <div className="actions">
                 <button
                   className="button"
-                  disabled={moderate.isPending}
+                  disabled={isActionPending}
                   onClick={() => {
                     moderate.reset();
                     moderate.mutate({
@@ -192,7 +296,7 @@ export function WorkshopsPage() {
                 </button>
                 <button
                   className="button button--ghost"
-                  disabled={moderate.isPending}
+                  disabled={isActionPending}
                   onClick={() => {
                     moderate.reset();
                     moderate.mutate({
@@ -206,7 +310,7 @@ export function WorkshopsPage() {
                 </button>
                 <button
                   className="button button--danger"
-                  disabled={moderate.isPending}
+                  disabled={isActionPending}
                   onClick={() => {
                     moderate.reset();
                     moderate.mutate({

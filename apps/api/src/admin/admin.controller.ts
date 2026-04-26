@@ -2,15 +2,18 @@ import { Body, Controller, Get, Param, Patch, Req, UseGuards } from '@nestjs/com
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@stomvp/shared';
 import { Request } from 'express';
+import { CurrentUser, JwtUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { UpdateReportStatusDto } from '../reports/dto/update-report-status.dto';
 import { ModerateReviewDto } from '../reviews/dto/moderate-review.dto';
 import { ModeratePhotoDto } from '../uploads/dto/moderate-photo.dto';
 import { getRequestOrigin } from '../uploads/uploads.utils';
 import { ModerateWorkshopDto } from '../workshops/dto/moderate-workshop.dto';
 import { AdminService } from './admin.service';
 import { BlockUserDto } from './dto/block-user.dto';
+import { VerifyMasterDto } from './dto/verify-master.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -31,8 +34,21 @@ export class AdminController {
   }
 
   @Patch('users/:id/block')
-  blockUser(@Param('id') id: string, @Body() dto: BlockUserDto) {
-    return this.adminService.blockUser(id, dto.isBlocked);
+  blockUser(
+    @Param('id') id: string,
+    @Body() dto: BlockUserDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.adminService.blockUser(id, dto.isBlocked, user.sub);
+  }
+
+  @Patch('users/:id/verify-master')
+  verifyMaster(
+    @Param('id') id: string,
+    @Body() dto: VerifyMasterDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.adminService.verifyMaster(id, dto.isVerifiedMaster, user.sub);
   }
 
   @Get('workshops')
@@ -41,8 +57,12 @@ export class AdminController {
   }
 
   @Patch('workshops/:id/moderate')
-  moderateWorkshop(@Param('id') id: string, @Body() dto: ModerateWorkshopDto) {
-    return this.adminService.moderateWorkshop(id, dto);
+  moderateWorkshop(
+    @Param('id') id: string,
+    @Body() dto: ModerateWorkshopDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.adminService.moderateWorkshop(id, dto, user.sub);
   }
 
   @Get('reviews')
@@ -51,8 +71,12 @@ export class AdminController {
   }
 
   @Patch('reviews/:id/moderate')
-  moderateReview(@Param('id') id: string, @Body() dto: ModerateReviewDto) {
-    return this.adminService.moderateReview(id, dto);
+  moderateReview(
+    @Param('id') id: string,
+    @Body() dto: ModerateReviewDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.adminService.moderateReview(id, dto, user.sub);
   }
 
   @Get('photos')
@@ -65,8 +89,28 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: ModeratePhotoDto,
     @Req() request: Request,
+    @CurrentUser() user: JwtUser,
   ) {
-    return this.adminService.moderatePhoto(id, dto.status, getRequestOrigin(request));
+    return this.adminService.moderatePhoto(id, dto.status, getRequestOrigin(request), user.sub);
+  }
+
+  @Get('reports')
+  reports() {
+    return this.adminService.listReports();
+  }
+
+  @Patch('reports/:id/status')
+  updateReportStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateReportStatusDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.adminService.updateReportStatus(id, dto, user.sub);
+  }
+
+  @Get('moderation-history')
+  moderationHistory() {
+    return this.adminService.listModerationHistory();
   }
 
   @Get('applications')

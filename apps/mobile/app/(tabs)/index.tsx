@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../../components/screen';
 import { WorkshopCard } from '../../components/workshop-card';
 import { api } from '../../src/api/client';
+import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
 
 const filterPalettes = [
@@ -26,16 +27,6 @@ const filterPalettes = [
   { background: '#FFF7DD', badge: '#FFECB2', border: '#EEDDAB', icon: colors.warning },
   { background: '#EEF2FF', badge: '#DCE4FF', border: '#CFD9FA', icon: '#4862C5' },
 ];
-
-const categoryIconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
-  diagnostics: 'speedometer-outline',
-  suspension: 'car-sport-outline',
-  electrics: 'flash-outline',
-  engine: 'construct-outline',
-  'body-repair': 'hammer-outline',
-  'tire-service': 'disc-outline',
-  'oil-service': 'water-outline',
-};
 
 export default function CatalogScreen() {
   const [search, setSearch] = useState('');
@@ -195,7 +186,7 @@ export default function CatalogScreen() {
               ]}
             >
               <Ionicons
-                name={categoryIconMap[category.slug] ?? 'sparkles-outline'}
+                name={getCategoryIcon(category.slug)}
                 size={20}
                 color={active ? '#FFFFFF' : palette.icon}
               />

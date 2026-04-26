@@ -1,11 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PhotoStatus, WorkshopStatus } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { buildUploadsProxyUrl } from '../uploads/uploads.utils';
+
+const WORKSHOP_PUBLIC_CACHE_PREFIX = 'workshops:public:';
 
 @Injectable()
 export class FavoritesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redisService: RedisService,
+  ) {}
 
   async list(userId: string, origin?: string) {
     const favorites = await this.prisma.favorite.findMany({
@@ -17,6 +23,11 @@ export class FavoritesService {
             categories: {
               include: {
                 category: true,
+              },
+            },
+            owner: {
+              select: {
+                isVerifiedMaster: true,
               },
             },
             photos: {
@@ -44,6 +55,7 @@ export class FavoritesService {
       reviewsCount: workshop.reviewsCount,
       favoritesCount: workshop.favoritesCount,
       isFavorite: true,
+      isVerifiedMaster: workshop.owner.isVerifiedMaster,
       createdAt: workshop.createdAt.toISOString(),
       categories: workshop.categories.map(({ category }) => ({
         id: category.id,
@@ -103,6 +115,7 @@ export class FavoritesService {
       return created;
     });
 
+    await this.redisService.deleteByPrefix(WORKSHOP_PUBLIC_CACHE_PREFIX);
     return favorite;
   }
 
@@ -123,6 +136,8 @@ export class FavoritesService {
           },
         },
       });
+
+      await this.redisService.deleteByPrefix(WORKSHOP_PUBLIC_CACHE_PREFIX);
     }
 
     return { removed: deleted.count > 0 };

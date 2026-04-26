@@ -12,6 +12,7 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { ApplicationsModule } from './applications/applications.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AdminModule } from './admin/admin.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AdminModule } from './admin/admin.module';
     FavoritesModule,
     ApplicationsModule,
     UploadsModule,
+    ReportsModule,
     AdminModule,
   ],
 })

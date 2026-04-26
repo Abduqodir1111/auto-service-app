@@ -19,7 +19,7 @@ async function bootstrap() {
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('STOMVP API')
+    .setTitle('MasterTop API')
     .setDescription('MVP API для платформы поиска СТО и автомастеров')
     .setVersion('0.1.0')
     .addBearerAuth()

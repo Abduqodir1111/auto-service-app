@@ -7,6 +7,8 @@ const links = [
   ['/workshops', 'СТО'],
   ['/reviews', 'Отзывы'],
   ['/photos', 'Фото'],
+  ['/reports', 'Жалобы'],
+  ['/moderation-history', 'История'],
   ['/categories', 'Категории'],
   ['/applications', 'Заявки'],
 ];
@@ -18,7 +20,7 @@ export function AppShell() {
     <div className="shell">
       <aside className="sidebar panel">
         <div>
-          <p className="eyebrow">STOMVP Admin</p>
+          <p className="eyebrow">MasterTop Admin</p>
           <h1>Панель модерации</h1>
           <p className="muted">
             Управление мастерскими, отзывами, фото и клиентскими заявками.
