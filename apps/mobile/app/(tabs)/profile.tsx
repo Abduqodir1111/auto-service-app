@@ -8,6 +8,7 @@ import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
+import { getWorkshopReadinessFromDetails } from '../../src/utils/workshop-readiness';
 
 const statusLabels: Record<WorkshopStatus, string> = {
   [WorkshopStatus.DRAFT]: 'Черновик',
@@ -107,6 +108,29 @@ export default function ProfileScreen() {
       );
     },
   });
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete('/users/me');
+    },
+    onSuccess: async () => {
+      queryClient.clear();
+      await setSession(null);
+      router.replace('/(auth)/sign-in');
+      Alert.alert(
+        'Аккаунт удалён',
+        'Ваш аккаунт и связанные с ним данные удалены с сервера.',
+      );
+    },
+    onError: (error) => {
+      Alert.alert(
+        'Не удалось удалить аккаунт',
+        getApiErrorMessage(
+          error,
+          'Попробуйте ещё раз. Если проблема повторится, проверьте подключение к серверу.',
+        ),
+      );
+    },
+  });
   const workshops = workshopsQuery.data ?? [];
 
   return (
@@ -164,6 +188,7 @@ export default function ProfileScreen() {
               const approvedPhotos = workshop.photos.filter(
                 (photo) => photo.status === PhotoStatus.APPROVED,
               ).length;
+              const readiness = getWorkshopReadinessFromDetails(workshop);
 
               return (
                 <View key={workshop.id} style={styles.listingCard}>
@@ -207,12 +232,24 @@ export default function ProfileScreen() {
                   <View style={styles.stageCard}>
                     <Text style={styles.stageLabel}>Текущая стадия</Text>
                     <Text style={styles.stageValue}>{statusLabels[workshop.status]}</Text>
+                    <View style={styles.progressTrack}>
+                      <View style={[styles.progressFill, { width: `${readiness.percent}%` }]} />
+                    </View>
                     <Text style={styles.stageDescription}>
                       {statusDescriptions[workshop.status]}
                     </Text>
                     <Text style={styles.stageMeta}>
                       Фото: {approvedPhotos} одобрено • {pendingPhotos} на проверке
                     </Text>
+                    {readiness.nextHints.length ? (
+                      <Text style={styles.stageHint}>
+                        Что ещё добавить: {readiness.nextHints.join(', ')}.
+                      </Text>
+                    ) : (
+                      <Text style={styles.stageHint}>
+                        Карточка заполнена хорошо. Следите за актуальностью фото и цен.
+                      </Text>
+                    )}
                   </View>
 
                   {workshop.rejectionReason ? (
@@ -272,6 +309,39 @@ export default function ProfileScreen() {
           )}
         </>
       ) : null}
+
+      <View style={[styles.card, styles.accountDangerCard]}>
+        <Text style={styles.sectionTitle}>Удаление аккаунта</Text>
+        <Text style={styles.muted}>
+          Вы можете полностью удалить аккаунт. Профиль, объявления, фото, заявки,
+          отзывы и избранное будут удалены с сервера без возможности восстановления.
+        </Text>
+        <Pressable
+          disabled={deleteAccountMutation.isPending}
+          onPress={() =>
+            Alert.alert(
+              'Удалить аккаунт навсегда?',
+              'Это действие нельзя отменить. Все данные аккаунта будут удалены с сервера.',
+              [
+                { text: 'Отмена', style: 'cancel' },
+                {
+                  text: 'Удалить аккаунт',
+                  style: 'destructive',
+                  onPress: () => deleteAccountMutation.mutate(),
+                },
+              ],
+            )
+          }
+          style={[
+            styles.deleteAccountButton,
+            deleteAccountMutation.isPending && styles.disabledButton,
+          ]}
+        >
+          <Text style={styles.deleteAccountText}>
+            {deleteAccountMutation.isPending ? 'Удаляем аккаунт...' : 'Удалить аккаунт'}
+          </Text>
+        </Pressable>
+      </View>
 
       <Pressable
         onPress={async () => {
@@ -461,5 +531,36 @@ const styles = StyleSheet.create({
   stageMeta: {
     color: colors.muted,
     fontWeight: '600',
+  },
+  stageHint: {
+    color: colors.accentDark,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#ECE5DA',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: colors.success,
+  },
+  accountDangerCard: {
+    borderColor: '#F1B3A7',
+    backgroundColor: '#FFF9F6',
+  },
+  deleteAccountButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+    alignItems: 'center',
+    backgroundColor: '#D75A43',
+  },
+  deleteAccountText: {
+    color: 'white',
+    fontWeight: '800',
   },
 });

@@ -1,4 +1,4 @@
-package com.anonymous.stomvp
+package uz.nedvigagregat.mastertop
 
 import android.app.Application
 import android.content.res.Configuration

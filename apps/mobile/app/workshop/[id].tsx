@@ -6,7 +6,7 @@ import axios from 'axios';
 import { useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { UserRole, WorkshopDetails } from '@stomvp/shared';
+import { ReportTargetType, UserRole, WorkshopDetails } from '@stomvp/shared';
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
@@ -37,6 +37,7 @@ export default function WorkshopDetailsScreen() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
 
   const workshopQuery = useQuery({
     queryKey: ['workshop', params.id],
@@ -105,6 +106,26 @@ export default function WorkshopDetailsScreen() {
     },
   });
 
+  const reportMutation = useMutation({
+    mutationFn: async (payload: {
+      targetType: ReportTargetType;
+      targetId: string;
+      reason: string;
+      comment?: string;
+    }) => {
+      await api.post('/reports', payload);
+    },
+    onSuccess: () => {
+      setReportNotice('Жалоба отправлена модератору. Спасибо, что помогаете держать каталог чистым.');
+    },
+    onError: (error) => {
+      Alert.alert(
+        'Не удалось отправить жалобу',
+        getApiErrorMessage(error, 'Проверьте подключение и попробуйте ещё раз.'),
+      );
+    },
+  });
+
   const workshop = workshopQuery.data;
   const canReview = session?.user.role === UserRole.CLIENT && session.user.id !== workshop?.ownerId;
   const isFavorite = workshop?.isFavorite ?? false;
@@ -119,6 +140,27 @@ export default function WorkshopDetailsScreen() {
 
   const hasCoordinates = workshop.latitude != null && workshop.longitude != null;
   const coverPhotos = workshop.photos.length ? workshop.photos : [];
+
+  const submitReport = (targetType: ReportTargetType, targetId: string, label: string) => {
+    if (!session) {
+      Alert.alert('Нужен вход', 'Чтобы отправить жалобу, войдите в аккаунт.');
+      return;
+    }
+
+    Alert.alert('Отправить жалобу?', `Модератор проверит: ${label}.`, [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Отправить',
+        onPress: () =>
+          reportMutation.mutate({
+            targetType,
+            targetId,
+            reason: label,
+            comment: `Пользователь сообщил о проблеме: ${label}`,
+          }),
+      },
+    ]);
+  };
 
   return (
     <Screen
@@ -138,7 +180,15 @@ export default function WorkshopDetailsScreen() {
       </View>
 
       <View style={styles.hero}>
-        <Text style={styles.title}>{workshop.title}</Text>
+        <View style={styles.heroTitleRow}>
+          <Text style={styles.title}>{workshop.title}</Text>
+          {workshop.isVerifiedMaster ? (
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="shield-checkmark" size={15} color="#FFFFFF" />
+              <Text style={styles.verifiedBadgeText}>Проверенный мастер</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={styles.subtitle}>
           {workshop.city}, {workshop.addressLine}
         </Text>
@@ -151,7 +201,18 @@ export default function WorkshopDetailsScreen() {
       >
         {coverPhotos.length ? (
           coverPhotos.map((photo) => (
-            <Image key={photo.id} source={{ uri: photo.url }} style={styles.heroPhoto} />
+            <View key={photo.id} style={styles.heroPhotoWrap}>
+              <Image source={{ uri: photo.url }} style={styles.heroPhoto} />
+              <Pressable
+                disabled={reportMutation.isPending}
+                onPress={() =>
+                  submitReport(ReportTargetType.PHOTO, photo.id, 'Проблема с фото')
+                }
+                style={styles.photoReportButton}
+              >
+                <Ionicons name="flag-outline" size={16} color={colors.accentDark} />
+              </Pressable>
+            </View>
           ))
         ) : (
           <View style={styles.heroPhotoEmpty}>
@@ -168,6 +229,11 @@ export default function WorkshopDetailsScreen() {
         <Text style={styles.meta}>
           Рейтинг {workshop.averageRating.toFixed(1)} • {workshop.reviewsCount} отзывов
         </Text>
+        {workshop.isVerifiedMaster ? (
+          <Text style={styles.verifiedText}>
+            Мастер проверен модератором MasterTop.
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.card}>
@@ -270,6 +336,21 @@ export default function WorkshopDetailsScreen() {
         <Text style={styles.primaryText}>Оставить заявку</Text>
       </Pressable>
 
+      <Pressable
+        disabled={reportMutation.isPending}
+        onPress={() =>
+          submitReport(ReportTargetType.WORKSHOP, workshop.id, 'Проблема с объявлением')
+        }
+        style={styles.reportButton}
+      >
+        <Ionicons name="flag-outline" size={18} color={colors.accentDark} />
+        <Text style={styles.reportButtonText}>
+          {reportMutation.isPending ? 'Отправляем жалобу...' : 'Пожаловаться на объявление'}
+        </Text>
+      </Pressable>
+
+      {reportNotice ? <Text style={styles.reportNotice}>{reportNotice}</Text> : null}
+
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Отзывы</Text>
         {canReview ? (
@@ -334,7 +415,19 @@ export default function WorkshopDetailsScreen() {
         {workshop.reviews.length ? (
           workshop.reviews.map((review) => (
             <View key={review.id} style={styles.review}>
-              <Text style={styles.serviceName}>{review.author.fullName}</Text>
+              <View style={styles.reviewHeader}>
+                <Text style={styles.serviceName}>{review.author.fullName}</Text>
+                <Pressable
+                  disabled={reportMutation.isPending}
+                  onPress={() =>
+                    submitReport(ReportTargetType.REVIEW, review.id, 'Проблема с отзывом')
+                  }
+                  style={styles.reviewReportButton}
+                >
+                  <Ionicons name="flag-outline" size={14} color={colors.accentDark} />
+                  <Text style={styles.reviewReportText}>Жалоба</Text>
+                </Pressable>
+              </View>
               <Text style={styles.meta}>Оценка {review.rating}/5</Text>
               <Text style={styles.reviewText}>{review.comment}</Text>
             </View>
@@ -380,10 +473,34 @@ const styles = StyleSheet.create({
   hero: {
     gap: 4,
   },
+  heroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   title: {
     fontSize: 28,
     fontWeight: '800',
     color: colors.text,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: colors.success,
+  },
+  verifiedBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  verifiedText: {
+    color: colors.success,
+    fontWeight: '700',
   },
   subtitle: {
     color: colors.muted,
@@ -392,11 +509,31 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingRight: 20,
   },
+  heroPhotoWrap: {
+    width: 276,
+    height: 196,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#FFF1E7',
+  },
   heroPhoto: {
     width: 276,
     height: 196,
     borderRadius: 24,
     backgroundColor: '#FFF1E7',
+  },
+  photoReportButton: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 253, 249, 0.92)',
+    borderWidth: 1,
+    borderColor: '#F1D1BC',
   },
   heroPhotoEmpty: {
     width: 276,
@@ -515,11 +652,51 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
     alignItems: 'center',
   },
+  reportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: '#FFF0E5',
+    borderWidth: 1,
+    borderColor: '#F1D1BC',
+  },
+  reportButtonText: {
+    color: colors.accentDark,
+    fontWeight: '800',
+  },
+  reportNotice: {
+    color: colors.success,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
   review: {
     paddingVertical: 8,
     gap: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  reviewReportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#FFF0E5',
+  },
+  reviewReportText: {
+    color: colors.accentDark,
+    fontSize: 12,
+    fontWeight: '800',
   },
   reviewText: {
     color: colors.text,

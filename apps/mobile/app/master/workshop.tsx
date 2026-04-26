@@ -28,6 +28,7 @@ import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
 import { useMapPickerStore } from '../../src/store/map-picker-store';
 import { getDefaultMapCoordinates, openExternalMap } from '../../src/utils/maps';
+import { getWorkshopReadiness } from '../../src/utils/workshop-readiness';
 
 const emptyStringToUndefined = (value: unknown) => {
   if (typeof value === 'string' && value.trim().length === 0) {
@@ -107,6 +108,12 @@ const statusDescriptions: Record<WorkshopStatus, string> = {
   [WorkshopStatus.APPROVED]: 'Карточка опубликована и уже доступна в каталоге для клиентов.',
   [WorkshopStatus.REJECTED]: 'Исправьте карточку по замечанию и повторно отправьте её на проверку.',
   [WorkshopStatus.BLOCKED]: 'Карточка заблокирована. Обратитесь к администратору платформы.',
+};
+
+const photoStatusLabels: Record<PhotoStatus, string> = {
+  [PhotoStatus.PENDING]: 'На проверке',
+  [PhotoStatus.APPROVED]: 'Одобрено',
+  [PhotoStatus.REJECTED]: 'Отклонено',
 };
 
 const unsavedWorkshopDrafts = new Map<string, FormValues>();
@@ -354,9 +361,11 @@ export default function WorkshopEditorScreen() {
   const selectedCategories = watch('categoryIds');
   const latitude = watch('latitude');
   const longitude = watch('longitude');
+  const formSnapshot = watch();
   const photos = selectedWorkshop?.photos ?? [];
   const pendingPhotos = photos.filter((photo) => photo.status === PhotoStatus.PENDING).length;
   const approvedPhotos = photos.filter((photo) => photo.status === PhotoStatus.APPROVED).length;
+  const readiness = getWorkshopReadiness({ ...formSnapshot, photos });
   const screenTitle = activeWorkshopId ? 'Редактирование объявления' : 'Новое объявление';
   const screenSubtitle = activeWorkshopId
     ? 'Обновляйте фото, услуги и точку на карте, чтобы карточка в каталоге всегда была актуальной.'
@@ -407,15 +416,18 @@ export default function WorkshopEditorScreen() {
     },
   });
 
+  const refreshWorkshopData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['my-workshops'] }),
+      queryClient.invalidateQueries({ queryKey: ['workshops'] }),
+      queryClient.invalidateQueries({ queryKey: ['favorites'] }),
+    ]);
+  };
+
   const uploadPhoto = useMutation({
     mutationFn: async () => {
       if (!activeWorkshopId) {
         throw new Error('Сначала сохраните объявление');
-      }
-
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        throw new Error('Нет доступа к галерее');
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -441,13 +453,7 @@ export default function WorkshopEditorScreen() {
         },
       });
     },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['my-workshops'] }),
-        queryClient.invalidateQueries({ queryKey: ['workshops'] }),
-        queryClient.invalidateQueries({ queryKey: ['favorites'] }),
-      ]);
-    },
+    onSuccess: refreshWorkshopData,
     onError: (error) => {
       Alert.alert(
         'Ошибка загрузки',
@@ -455,6 +461,45 @@ export default function WorkshopEditorScreen() {
       );
     },
   });
+
+  const setPrimaryPhoto = useMutation({
+    mutationFn: async (photoId: string) => {
+      await api.patch(`/uploads/photos/${photoId}/primary`);
+    },
+    onSuccess: refreshWorkshopData,
+    onError: (error) => {
+      Alert.alert(
+        'Не удалось выбрать главное фото',
+        getApiErrorMessage(error, 'Проверьте подключение и попробуйте ещё раз.'),
+      );
+    },
+  });
+
+  const deletePhoto = useMutation({
+    mutationFn: async (photoId: string) => {
+      await api.delete(`/uploads/photos/${photoId}`);
+    },
+    onSuccess: refreshWorkshopData,
+    onError: (error) => {
+      Alert.alert(
+        'Не удалось удалить фото',
+        getApiErrorMessage(error, 'Проверьте подключение и попробуйте ещё раз.'),
+      );
+    },
+  });
+
+  const isPhotoActionBusy = uploadPhoto.isPending || setPrimaryPhoto.isPending || deletePhoto.isPending;
+
+  const confirmDeletePhoto = (photoId: string) => {
+    Alert.alert('Удалить фото?', 'Фото удалится из объявления и с сервера.', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: () => deletePhoto.mutate(photoId),
+      },
+    ]);
+  };
 
   const openLocationPicker = () => {
     const fallback = getDefaultMapCoordinates();
@@ -502,12 +547,24 @@ export default function WorkshopEditorScreen() {
           <View style={styles.stageCard}>
             <Text style={styles.stageLabel}>Текущая стадия</Text>
             <Text style={styles.stageTitle}>{statusLabels[selectedWorkshop.status]}</Text>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${readiness.percent}%` }]} />
+            </View>
             <Text style={styles.stageDescription}>
               {statusDescriptions[selectedWorkshop.status]}
             </Text>
             <Text style={styles.stageMeta}>
               Фото: {approvedPhotos} одобрено • {pendingPhotos} на проверке
             </Text>
+            {readiness.nextHints.length ? (
+              <Text style={styles.stageHint}>
+                Осталось добавить: {readiness.nextHints.join(', ')}.
+              </Text>
+            ) : (
+              <Text style={styles.stageHint}>
+                Всё важное заполнено. При сохранении карточка автоматически уйдёт на модерацию.
+              </Text>
+            )}
           </View>
         ) : null}
       </View>
@@ -708,12 +765,38 @@ export default function WorkshopEditorScreen() {
           >
             {photos.map((photo) => (
               <View key={photo.id} style={styles.photoCard}>
-                <Image source={{ uri: photo.url }} style={styles.photoImage} />
-                {photo.isPrimary ? (
-                  <View style={styles.primaryPhotoBadge}>
-                    <Text style={styles.primaryPhotoBadgeText}>Главное фото</Text>
+                <View style={styles.photoImageWrap}>
+                  <Image source={{ uri: photo.url }} style={styles.photoImage} />
+                  {photo.isPrimary ? (
+                    <View style={styles.primaryPhotoBadge}>
+                      <Text style={styles.primaryPhotoBadgeText}>Главное фото</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <View style={styles.photoBody}>
+                  <Text style={styles.photoStatusText}>{photoStatusLabels[photo.status]}</Text>
+                  <View style={styles.photoActions}>
+                    <Pressable
+                      onPress={() => setPrimaryPhoto.mutate(photo.id)}
+                      disabled={photo.isPrimary || isPhotoActionBusy}
+                      style={[
+                        styles.photoActionButton,
+                        photo.isPrimary && styles.photoActionButtonDisabled,
+                      ]}
+                    >
+                      <Text style={styles.photoActionText}>
+                        {photo.isPrimary ? 'Выбрано' : 'Главное'}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => confirmDeletePhoto(photo.id)}
+                      disabled={isPhotoActionBusy}
+                      style={[styles.photoActionButton, styles.photoDeleteButton]}
+                    >
+                      <Text style={[styles.photoActionText, styles.photoDeleteText]}>Удалить</Text>
+                    </Pressable>
                   </View>
-                ) : null}
+                </View>
               </View>
             ))}
           </ScrollView>
@@ -897,6 +980,22 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontWeight: '600',
   },
+  stageHint: {
+    color: colors.accentDark,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#ECE5DA',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: colors.success,
+  },
   sectionTitle: {
     fontWeight: '800',
     color: colors.text,
@@ -986,17 +1085,53 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   photoCard: {
-    width: 172,
-    height: 122,
+    width: 190,
     borderRadius: 24,
     overflow: 'hidden',
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
   },
+  photoImageWrap: {
+    height: 122,
+  },
   photoImage: {
     width: '100%',
     height: '100%',
+  },
+  photoBody: {
+    gap: 8,
+    padding: 10,
+  },
+  photoStatusText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  photoActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  photoActionButton: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingVertical: 8,
+    backgroundColor: '#EAF4F1',
+  },
+  photoActionButtonDisabled: {
+    opacity: 0.55,
+  },
+  photoActionText: {
+    color: colors.success,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  photoDeleteButton: {
+    backgroundColor: '#F9E3DC',
+  },
+  photoDeleteText: {
+    color: colors.danger,
   },
   primaryPhotoBadge: {
     position: 'absolute',

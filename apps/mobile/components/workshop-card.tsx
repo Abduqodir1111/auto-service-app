@@ -41,7 +41,15 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
 
       <View style={styles.header}>
         <View style={styles.titleWrap}>
-          <Text style={styles.title}>{workshop.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{workshop.title}</Text>
+            {workshop.isVerifiedMaster ? (
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="shield-checkmark" size={13} color="#FFFFFF" />
+                <Text style={styles.verifiedBadgeText}>Проверен</Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={styles.subtitle}>
             {workshop.city} • {workshop.addressLine}
           </Text>
@@ -188,10 +196,30 @@ const styles = StyleSheet.create({
   titleWrap: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   title: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.text,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: colors.success,
+  },
+  verifiedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
   subtitle: {
     color: colors.muted,

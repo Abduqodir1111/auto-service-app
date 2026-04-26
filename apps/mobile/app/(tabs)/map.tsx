@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import * as Location from 'expo-location';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +19,7 @@ import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
+import { getDeviceCoordinates } from '../../src/utils/device-location';
 import { createWorkshopsLeafletHtml } from '../../src/utils/leaflet-html';
 import { getDefaultMapCoordinates } from '../../src/utils/maps';
 
@@ -55,6 +55,7 @@ export default function MapTabScreen() {
   const [deviceLocation, setDeviceLocation] = useState<Coordinates | null>(null);
   const [mapCenter, setMapCenter] = useState<Coordinates | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const filterRailRef = useRef<ScrollView>(null);
   const deferredSearch = useDeferredValue(search);
   const deferredCity = useDeferredValue(city);
   const fallbackCenter = useMemo(() => getDefaultMapCoordinates(), []);
@@ -119,6 +120,16 @@ export default function MapTabScreen() {
     }
   }, [categoryId, deferredCity, deferredSearch]);
 
+  useEffect(() => {
+    if (categoryId || categories.length === 0) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      filterRailRef.current?.scrollTo({ x: 0, animated: false });
+    });
+  }, [categories.length, categoryId]);
+
   const resolveDeviceLocation = async ({
     forceCenter,
     silent,
@@ -129,17 +140,14 @@ export default function MapTabScreen() {
     try {
       setIsLocating(true);
 
-      let permission = await Location.getForegroundPermissionsAsync();
-      if (permission.status !== Location.PermissionStatus.GRANTED) {
-        permission = await Location.requestForegroundPermissionsAsync();
-      }
+      const result = await getDeviceCoordinates(fallbackCenter);
 
-      if (permission.status !== Location.PermissionStatus.GRANTED) {
+      if (!result.coordinates) {
         if (forceCenter && !mapCenter) {
           setMapCenter(fallbackCenter);
         }
 
-        if (!silent) {
+        if (!silent && result.permissionDenied) {
           Alert.alert(
             'Нет доступа к геопозиции',
             'Разрешите доступ к локации, чтобы показывать ваше место на карте.',
@@ -147,15 +155,7 @@ export default function MapTabScreen() {
         }
         return;
       }
-
-      const current = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const nextLocation = {
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-      };
+      const nextLocation = result.coordinates;
 
       setDeviceLocation(nextLocation);
 
@@ -163,6 +163,10 @@ export default function MapTabScreen() {
         setMapCenter(nextLocation);
       }
     } catch {
+      if (forceCenter && !mapCenter) {
+        setMapCenter(fallbackCenter);
+      }
+
       if (!silent) {
         Alert.alert(
           'Не удалось определить геопозицию',
@@ -244,6 +248,7 @@ export default function MapTabScreen() {
       </View>
 
       <ScrollView
+        ref={filterRailRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterRail}
@@ -382,6 +387,12 @@ export default function MapTabScreen() {
                   {selectedWorkshop.categories.slice(0, 2).map((item) => item.name).join(', ') ||
                     'Без категории'}
                 </Text>
+                {selectedWorkshop.isVerifiedMaster ? (
+                  <View style={styles.previewVerified}>
+                    <Ionicons name="shield-checkmark" size={12} color="#FFFFFF" />
+                    <Text style={styles.previewVerifiedText}>Проверенный мастер</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
 
@@ -590,6 +601,21 @@ const styles = StyleSheet.create({
     color: colors.accentDark,
     fontWeight: '700',
     fontSize: 12,
+  },
+  previewVerified: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: colors.success,
+  },
+  previewVerifiedText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
   primaryButton: {
     paddingVertical: 14,

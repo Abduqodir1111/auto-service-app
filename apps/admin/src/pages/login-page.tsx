@@ -24,8 +24,8 @@ export function LoginPage() {
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      phone: '+998900000001',
-      password: 'Admin123!',
+      phone: '',
+      password: '',
     },
   });
 
@@ -51,7 +51,7 @@ export function LoginPage() {
           <p className="eyebrow">MasterTop</p>
           <h1>Админ-панель сервиса для СТО</h1>
           <p className="muted">
-            Используйте seeded-аккаунт администратора или свои admin-данные из базы.
+            Войдите с администраторскими данными из базы.
           </p>
         </div>
 

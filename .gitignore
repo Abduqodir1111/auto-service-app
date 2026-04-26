@@ -26,7 +26,13 @@ apps/mobile/android/.gradle
 apps/mobile/android/build
 apps/mobile/android/app/build
 apps/mobile/android/local.properties
+apps/mobile/android/keystore.properties
 apps/mobile/android/.cxx
+apps/mobile/ios/Pods
+apps/mobile/ios/build
+apps/mobile/ios/.xcode.env.local
+apps/mobile/ios/*.xcworkspace/xcuserdata
+apps/mobile/ios/**/*.xcuserstate
 *.apk
 *.aab
 *.jks

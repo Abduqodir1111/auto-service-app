@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Easing,
   Keyboard,
@@ -20,6 +21,7 @@ import { WorkshopCard } from '../../components/workshop-card';
 import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
+import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
 
 const filterPalettes = [
   { background: '#FFF1E7', badge: '#FFE3D0', border: '#F1D1BC', icon: colors.accentDark },
@@ -29,11 +31,13 @@ const filterPalettes = [
 ];
 
 export default function CatalogScreen() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [searchExpanded, setSearchExpanded] = useState(false);
   const searchAnimation = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef<TextInput>(null);
+  const filterRailRef = useRef<ScrollView>(null);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -55,6 +59,41 @@ export default function CatalogScreen() {
         },
       });
       return data.data;
+    },
+  });
+
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: async (workshop: WorkshopSummary) => {
+      const nextIsFavorite = !workshop.isFavorite;
+
+      if (nextIsFavorite) {
+        await api.post(`/favorites/${workshop.id}`);
+        return nextIsFavorite;
+      }
+
+      await api.delete(`/favorites/${workshop.id}`);
+      return nextIsFavorite;
+    },
+    onMutate: async (workshop) => {
+      const nextIsFavorite = !workshop.isFavorite;
+      const rollback = syncFavoriteCaches(queryClient, workshop, nextIsFavorite);
+      return { rollback };
+    },
+    onError: (_error, workshop, context) => {
+      context?.rollback?.();
+      Alert.alert(
+        'Не удалось обновить избранное',
+        workshop.isFavorite
+          ? 'Не получилось убрать объявление из избранного. Попробуйте ещё раз.'
+          : 'Не получилось добавить объявление в избранное. Попробуйте ещё раз.',
+      );
+    },
+    onSuccess: async (_nextIsFavorite, workshop) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['favorites'] }),
+        queryClient.invalidateQueries({ queryKey: ['workshops'] }),
+        queryClient.invalidateQueries({ queryKey: ['workshop', workshop.id] }),
+      ]);
     },
   });
 
@@ -86,6 +125,16 @@ export default function CatalogScreen() {
       Keyboard.dismiss();
     });
   }, [searchAnimation, searchExpanded]);
+
+  useEffect(() => {
+    if (categoryId || categories.length === 0) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      filterRailRef.current?.scrollTo({ x: 0, animated: false });
+    });
+  }, [categories.length, categoryId]);
 
   const closeSearch = () => {
     setSearch('');
@@ -129,6 +178,7 @@ export default function CatalogScreen() {
       </View>
 
       <ScrollView
+        ref={filterRailRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterRail}
@@ -205,7 +255,18 @@ export default function CatalogScreen() {
       <View style={styles.list}>
         {(workshopsQuery.data ?? []).length ? (
           (workshopsQuery.data ?? []).map((workshop) => (
-            <WorkshopCard key={workshop.id} workshop={workshop} />
+            <WorkshopCard
+              key={workshop.id}
+              workshop={workshop}
+              favoriteAction={{
+                label: workshop.isFavorite ? 'Убрать' : 'В избранное',
+                isDanger: Boolean(workshop.isFavorite),
+                disabled:
+                  toggleFavoriteMutation.isPending &&
+                  toggleFavoriteMutation.variables?.id === workshop.id,
+                onPress: () => toggleFavoriteMutation.mutate(workshop),
+              }}
+            />
           ))
         ) : (
           <View style={styles.emptyCard}>

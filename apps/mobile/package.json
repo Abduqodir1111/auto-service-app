@@ -11,7 +11,9 @@
     "prebuild": "npm run build -w @stomvp/shared",
     "build": "npm run build:ios",
     "build:ios": "expo export --platform ios",
-    "build:android": "expo export --platform android"
+    "build:android": "expo export --platform android",
+    "bundle:android": "cd android && ./gradlew bundleRelease",
+    "assemble:android": "cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

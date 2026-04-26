@@ -20,7 +20,7 @@ export function AppLogo({ compact = false }: AppLogoProps) {
       </View>
 
       <View style={styles.copy}>
-        <Text style={[styles.brand, compact && styles.brandCompact]}>STOMVP</Text>
+        <Text style={[styles.brand, compact && styles.brandCompact]}>MasterTop</Text>
         <Text style={[styles.tagline, compact && styles.taglineCompact]}>
           Поиск СТО рядом
         </Text>

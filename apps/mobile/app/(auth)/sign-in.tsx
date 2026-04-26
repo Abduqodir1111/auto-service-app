@@ -29,8 +29,8 @@ export default function SignInScreen() {
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      phone: '+998900000001',
-      password: 'Admin123!',
+      phone: '',
+      password: '',
     },
   });
 
@@ -69,7 +69,7 @@ export default function SignInScreen() {
     <Screen>
       <View style={styles.hero}>
         <AppLogo />
-        <Text style={styles.eyebrow}>STOMVP</Text>
+        <Text style={styles.eyebrow}>MasterTop</Text>
         <Text style={styles.title}>Найдите ближайшее СТО без лишних звонков</Text>
         <Text style={styles.subtitle}>
           Каталог мастерских, заявки, избранное и управление профилем мастера в одном приложении.
