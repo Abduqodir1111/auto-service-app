@@ -41,3 +41,8 @@ apps/mobile/ios/**/*.xcuserstate
 apps/api/prisma/dev.db
 apps/api/prisma/dev.db-journal
 apps/api/generated
+
+# Mobile credentials — never commit
+apps/mobile/credentials/
+apps/mobile/**/*-firebase-adminsdk-*.json
+apps/mobile/**/AuthKey_*.p8
