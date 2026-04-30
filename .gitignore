@@ -44,5 +44,6 @@ apps/api/generated
 
 # Mobile credentials — never commit
 apps/mobile/credentials/
+apps/mobile/credentials.json
 apps/mobile/**/*-firebase-adminsdk-*.json
 apps/mobile/**/AuthKey_*.p8
