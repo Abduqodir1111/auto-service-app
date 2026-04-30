@@ -73,24 +73,25 @@ enum ModerationAction {
 }
 
 model User {
-  id                   String        @id @default(uuid()) @db.Uuid
+  id                   String           @id @default(uuid()) @db.Uuid
   fullName             String
-  phone                String        @unique
-  email                String?       @unique
+  phone                String           @unique
+  email                String?          @unique
   passwordHash         String
-  role                 UserRole      @default(CLIENT)
-  isBlocked            Boolean       @default(false)
-  isVerifiedMaster     Boolean       @default(false)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  workshops            Workshop[]    @relation("WorkshopOwner")
+  role                 UserRole         @default(CLIENT)
+  isBlocked            Boolean          @default(false)
+  isVerifiedMaster     Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  workshops            Workshop[]       @relation("WorkshopOwner")
   favorites            Favorite[]
-  reviews              Review[]      @relation("ReviewAuthor")
-  customerApplications Application[] @relation("CustomerApplications")
-  uploadedPhotos       WorkshopPhoto[] @relation("PhotoUploader")
-  reports              Report[]      @relation("ReportReporter")
-  moderationLogs       ModerationLog[] @relation("ModerationActor")
+  reviews              Review[]         @relation("ReviewAuthor")
+  customerApplications Application[]    @relation("CustomerApplications")
+  uploadedPhotos       WorkshopPhoto[]  @relation("PhotoUploader")
+  reports              Report[]         @relation("ReportReporter")
+  moderationLogs       ModerationLog[]  @relation("ModerationActor")
   deviceTokens         DeviceToken[]
+  analyticsEvents      AnalyticsEvent[]
 }
 
 enum DevicePlatform {
@@ -112,43 +113,43 @@ model DeviceToken {
 }
 
 model Category {
-  id          String            @id @default(uuid()) @db.Uuid
-  name        String            @unique
-  slug        String            @unique
+  id          String             @id @default(uuid()) @db.Uuid
+  name        String             @unique
+  slug        String             @unique
   description String?
-  isActive    Boolean           @default(true)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
   workshops   WorkshopCategory[]
   services    WorkshopService[]
 }
 
 model Workshop {
-  id             String            @id @default(uuid()) @db.Uuid
-  ownerId        String            @db.Uuid
-  title          String
-  description    String
-  phone          String
-  telegram       String?
-  addressLine    String
-  city           String
-  latitude       Decimal?          @db.Decimal(9, 6)
-  longitude      Decimal?          @db.Decimal(9, 6)
-  openingHours   String?
-  status         WorkshopStatus    @default(PENDING)
-  averageRating  Decimal           @default(0) @db.Decimal(3, 2)
-  reviewsCount   Int               @default(0)
-  favoritesCount Int               @default(0)
+  id              String             @id @default(uuid()) @db.Uuid
+  ownerId         String             @db.Uuid
+  title           String
+  description     String
+  phone           String
+  telegram        String?
+  addressLine     String
+  city            String
+  latitude        Decimal?           @db.Decimal(9, 6)
+  longitude       Decimal?           @db.Decimal(9, 6)
+  openingHours    String?
+  status          WorkshopStatus     @default(PENDING)
+  averageRating   Decimal            @default(0) @db.Decimal(3, 2)
+  reviewsCount    Int                @default(0)
+  favoritesCount  Int                @default(0)
   rejectionReason String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  owner          User              @relation("WorkshopOwner", fields: [ownerId], references: [id])
-  categories     WorkshopCategory[]
-  services       WorkshopService[]
-  photos         WorkshopPhoto[]
-  reviews        Review[]
-  applications   Application[]
-  favorites      Favorite[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  owner           User               @relation("WorkshopOwner", fields: [ownerId], references: [id])
+  categories      WorkshopCategory[]
+  services        WorkshopService[]
+  photos          WorkshopPhoto[]
+  reviews         Review[]
+  applications    Application[]
+  favorites       Favorite[]
 
   @@index([status, city])
   @@index([ownerId])
@@ -222,19 +223,19 @@ model Favorite {
 }
 
 model Application {
-  id              String            @id @default(uuid()) @db.Uuid
-  workshopId      String            @db.Uuid
-  customerId      String            @db.Uuid
-  customerName    String
-  customerPhone   String
-  carModel        String?
+  id               String            @id @default(uuid()) @db.Uuid
+  workshopId       String            @db.Uuid
+  customerId       String            @db.Uuid
+  customerName     String
+  customerPhone    String
+  carModel         String?
   issueDescription String
-  preferredDate   DateTime?
-  status          ApplicationStatus @default(NEW)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  workshop        Workshop          @relation(fields: [workshopId], references: [id], onDelete: Cascade)
-  customer        User              @relation("CustomerApplications", fields: [customerId], references: [id])
+  preferredDate    DateTime?
+  status           ApplicationStatus @default(NEW)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  workshop         Workshop          @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  customer         User              @relation("CustomerApplications", fields: [customerId], references: [id])
 
   @@index([customerId])
   @@index([workshopId, status])
@@ -242,16 +243,16 @@ model Application {
 
 model Report {
   id         String           @id @default(uuid()) @db.Uuid
-  reporterId String?         @db.Uuid
+  reporterId String?          @db.Uuid
   targetType ReportTargetType
-  targetId   String          @db.Uuid
+  targetId   String           @db.Uuid
   reason     String
   comment    String?
-  status     ReportStatus    @default(NEW)
+  status     ReportStatus     @default(NEW)
   resolution String?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  reporter   User?           @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  reporter   User?            @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@index([targetType, targetId])
@@ -273,5 +274,26 @@ model ModerationLog {
 
   @@index([entityType, entityId])
   @@index([actorId])
+  @@index([createdAt])
+}
+
+/// Lightweight product-analytics log. Mobile / admin POST events here;
+/// queries are SQL-based (Prisma Studio or direct psql), no third-party
+/// analytics provider. `properties` stores arbitrary per-event payload
+/// (e.g. workshopId for workshop_viewed). `userId` is null for events
+/// before sign-in (app_opened, signup_started). Server records the
+/// client IP and user agent for sanity (catch bots, segment by region).
+model AnalyticsEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @db.Uuid
+  name       String
+  properties Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([name, createdAt])
+  @@index([userId])
   @@index([createdAt])
 }

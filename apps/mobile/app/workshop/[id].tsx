@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import axios from 'axios';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReportTargetType, UserRole, WorkshopDetails } from '@stomvp/shared';
@@ -14,6 +14,7 @@ import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
 import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
 import { openExternalMap } from '../../src/utils/maps';
+import { track } from '../../src/utils/analytics';
 
 function getApiErrorMessage(error: unknown, fallback: string) {
   const apiMessage = axios.isAxiosError(error) ? error.response?.data?.message : null;
@@ -46,6 +47,14 @@ export default function WorkshopDetailsScreen() {
       return data;
     },
   });
+
+  // workshop_viewed: fire once per id navigation. Tracks intent to view —
+  // not whether the fetch succeeded (404s still count as a view attempt).
+  useEffect(() => {
+    if (params.id) {
+      track('workshop_viewed', { workshopId: params.id });
+    }
+  }, [params.id]);
 
   const favoriteMutation = useMutation({
     mutationFn: async (nextIsFavorite: boolean) => {

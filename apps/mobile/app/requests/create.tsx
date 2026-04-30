@@ -8,6 +8,7 @@ import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
+import { track } from '../../src/utils/analytics';
 
 const schema = z.object({
   customerName: z.string().min(2, 'Введите имя'),
@@ -37,6 +38,7 @@ export default function CreateRequestScreen() {
       });
     },
     onSuccess: () => {
+      track('application_created', { workshopId: params.workshopId });
       router.replace('/(tabs)/requests');
     },
   });

@@ -16,6 +16,7 @@ import { AdminModule } from './admin/admin.module';
 import { DevicesModule } from './devices/devices.module';
 import { ReportsModule } from './reports/reports.module';
 import { HealthModule } from './health/health.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -33,6 +34,11 @@ import { HealthModule } from './health/health.module';
         ttl: 60_000,
         limit: 3,
       },
+      {
+        name: 'analytics',
+        ttl: 60_000,
+        limit: 60,
+      },
     ]),
     PrismaModule,
     RedisModule,
@@ -48,6 +54,7 @@ import { HealthModule } from './health/health.module';
     ReportsModule,
     AdminModule,
     HealthModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}

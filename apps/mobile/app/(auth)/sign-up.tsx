@@ -12,6 +12,7 @@ import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { usePendingSignUpStore } from '../../src/store/pending-sign-up-store';
+import { track } from '../../src/utils/analytics';
 
 const schema = z
   .object({
@@ -63,6 +64,9 @@ export default function SignUpScreen() {
     },
     onSuccess: (_, variables, context) => {
       setRequestError(null);
+      // Fire signup_started only after the SMS gateway confirms — counts
+      // real funnel entries, not idle keystrokes on a half-filled form.
+      track('signup_started', { role: watch('role') });
       router.push('/(auth)/sign-up-verify');
     },
     onError: (error) => {

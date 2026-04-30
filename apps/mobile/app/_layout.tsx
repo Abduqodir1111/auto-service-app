@@ -6,6 +6,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { api } from '../src/api/client';
 import { colors } from '../src/constants/theme';
 import { useAuthStore } from '../src/store/auth-store';
+import { track } from '../src/utils/analytics';
 import {
   getPushTokenForDevice,
   installNotificationHandler,
@@ -27,6 +28,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     hydrate();
+    // Fire app_opened once per process start. Anonymous if user not yet
+    // signed in; track() picks up userId from auth store automatically
+    // after sign-in (subsequent events in this process).
+    track('app_opened');
   }, [hydrate]);
 
   useEffect(() => {

@@ -10,6 +10,7 @@ import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
 import { usePendingSignUpStore } from '../../src/store/pending-sign-up-store';
+import { track } from '../../src/utils/analytics';
 
 type VerifyCodeResponse = {
   verificationToken: string;
@@ -53,6 +54,9 @@ export default function SignUpVerifyScreen() {
     onSuccess: async (payload) => {
       clearPendingPayload();
       await setSession(payload);
+      // signup_completed: real registration finished, session established.
+      // userId now comes from the auth store automatically.
+      track('signup_completed', { role: payload.user.role });
       router.replace('/(tabs)');
     },
     onError: (error) => {
