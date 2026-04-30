@@ -52,6 +52,14 @@ export class UploadsService implements OnModuleInit {
     }
   }
 
+  /**
+   * Liveness probe used by HealthService — pings the configured S3 bucket.
+   * Throws if the bucket is unreachable or auth is broken.
+   */
+  async healthCheck(): Promise<void> {
+    await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
+  }
+
   async uploadWorkshopPhoto(
     workshopId: string,
     file: Express.Multer.File,
