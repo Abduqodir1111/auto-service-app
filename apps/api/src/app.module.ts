@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { validateEnv } from './config/env.schema';
 import { PrismaModule } from './database/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -22,6 +23,17 @@ import { HealthModule } from './health/health.module';
       isGlobal: true,
       validate: validateEnv,
     }),
+    // Rate-limiter: not applied globally (no APP_GUARD). Specific
+    // endpoints opt in via @UseGuards(ThrottlerGuard) + @Throttle().
+    // Currently used by /auth/register/request-code to prevent SMS flooding
+    // (each request hits paid DevSMS, so an unprotected endpoint = $$$ leak).
+    ThrottlerModule.forRoot([
+      {
+        name: 'sms',
+        ttl: 60_000,
+        limit: 3,
+      },
+    ]),
     PrismaModule,
     RedisModule,
     AuthModule,
