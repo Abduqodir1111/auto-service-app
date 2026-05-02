@@ -293,10 +293,14 @@ export class AdminService {
       LIMIT 10
     `;
 
-    // Resolve workshop titles
+    // Resolve workshop titles. Filter to valid UUIDs only — old test events
+    // (e.g. seeded by curl during dev) may have non-UUID workshopIds, and
+    // Prisma will throw "Inconsistent column data" if we pass them through.
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const workshopIds = topWorkshopsRaw
       .map((row) => row.workshopId)
-      .filter((id): id is string => Boolean(id));
+      .filter((id): id is string => Boolean(id) && UUID_RE.test(id));
     const workshops = workshopIds.length
       ? await this.prisma.workshop.findMany({
           where: { id: { in: workshopIds } },
