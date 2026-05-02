@@ -33,6 +33,38 @@ export type AdminAnalytics = {
   totalApplications: number;
 };
 
+export type AdminEventName =
+  | 'app_opened'
+  | 'signup_started'
+  | 'signup_completed'
+  | 'workshop_viewed'
+  | 'application_created'
+  | string;
+
+export type AdminEventsAnalytics = {
+  totals: {
+    totalUsers: number;
+    active24h: number;
+    active7d: number;
+    totalApplications: number;
+    totalEvents: number;
+  };
+  funnel: Array<{ event: AdminEventName; count: number }>;
+  activityByDay: Array<{ day: string; count: number }>;
+  topWorkshops: Array<{ workshopId: string; title: string; views: number }>;
+  recentEvents: Array<{
+    id: string;
+    name: AdminEventName;
+    properties: Record<string, unknown> | null;
+    userId: string | null;
+    userName: string | null;
+    userPhone: string | null;
+    ip: string | null;
+    userAgent: string | null;
+    createdAt: string;
+  }>;
+};
+
 export type AdminWorkshop = {
   id: string;
   title: string;

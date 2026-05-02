@@ -28,6 +28,11 @@ export class AdminController {
     return this.adminService.analytics();
   }
 
+  @Get('analytics/events')
+  eventsAnalytics() {
+    return this.adminService.getEventsAnalytics();
+  }
+
   @Get('users')
   users() {
     return this.adminService.listUsers();

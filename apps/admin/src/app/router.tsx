@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '../components/app-shell';
 import { useAuth } from '../features/auth/auth-provider';
+import { AnalyticsPage } from '../pages/analytics-page';
 import { ApplicationsPage } from '../pages/applications-page';
 import { CategoriesPage } from '../pages/categories-page';
 import { DashboardPage } from '../pages/dashboard-page';
@@ -38,6 +39,7 @@ export function AppRouter() {
       />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/workshops" element={<WorkshopsPage />} />
         <Route path="/reviews" element={<ReviewsPage />} />

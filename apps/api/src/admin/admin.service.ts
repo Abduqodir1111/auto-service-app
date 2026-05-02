@@ -216,4 +216,137 @@ export class AdminService {
       actor: log.actor,
     }));
   }
+
+  /**
+   * Product-analytics dashboard data — aggregates AnalyticsEvent rows
+   * into the shape the admin dashboard renders. All aggregations are
+   * SQL-side (Prisma raw / aggregations) so we don't pull millions of
+   * rows into Node memory. Public to admin only via guards on controller.
+   */
+  async getEventsAnalytics() {
+    const FUNNEL = [
+      'app_opened',
+      'signup_started',
+      'signup_completed',
+      'workshop_viewed',
+      'application_created',
+    ] as const;
+
+    const now = new Date();
+    const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // 1. Big numbers
+    const [
+      totalUsers,
+      active24hRows,
+      active7dRows,
+      totalApplications,
+      totalEvents,
+    ] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.analyticsEvent.findMany({
+        where: { name: 'app_opened', createdAt: { gte: since24h }, userId: { not: null } },
+        select: { userId: true },
+        distinct: ['userId'],
+      }),
+      this.prisma.analyticsEvent.findMany({
+        where: { name: 'app_opened', createdAt: { gte: since7d }, userId: { not: null } },
+        select: { userId: true },
+        distinct: ['userId'],
+      }),
+      this.prisma.analyticsEvent.count({ where: { name: 'application_created' } }),
+      this.prisma.analyticsEvent.count(),
+    ]);
+
+    // 2. Funnel (last 7 days) — counts per event in canonical order
+    const funnelCounts = await Promise.all(
+      FUNNEL.map(async (name) => {
+        const count = await this.prisma.analyticsEvent.count({
+          where: { name, createdAt: { gte: since7d } },
+        });
+        return { event: name, count };
+      }),
+    );
+
+    // 3. Activity by day (last 30 days) — bucket app_opened per UTC day
+    const activityByDay = await this.prisma.$queryRaw<
+      Array<{ day: Date; count: bigint }>
+    >`
+      SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::bigint AS count
+      FROM "AnalyticsEvent"
+      WHERE name = 'app_opened' AND "createdAt" >= ${since30d}
+      GROUP BY day
+      ORDER BY day ASC
+    `;
+
+    // 4. Top workshops by views (all-time top 10)
+    const topWorkshopsRaw = await this.prisma.$queryRaw<
+      Array<{ workshopId: string; views: bigint }>
+    >`
+      SELECT properties->>'workshopId' AS "workshopId", COUNT(*)::bigint AS views
+      FROM "AnalyticsEvent"
+      WHERE name = 'workshop_viewed' AND properties ? 'workshopId'
+      GROUP BY "workshopId"
+      ORDER BY views DESC
+      LIMIT 10
+    `;
+
+    // Resolve workshop titles
+    const workshopIds = topWorkshopsRaw
+      .map((row) => row.workshopId)
+      .filter((id): id is string => Boolean(id));
+    const workshops = workshopIds.length
+      ? await this.prisma.workshop.findMany({
+          where: { id: { in: workshopIds } },
+          select: { id: true, title: true },
+        })
+      : [];
+    const workshopTitleMap = new Map(workshops.map((w) => [w.id, w.title]));
+
+    const topWorkshops = topWorkshopsRaw.map((row) => ({
+      workshopId: row.workshopId,
+      title: workshopTitleMap.get(row.workshopId) ?? '(удалена или некорректный ID)',
+      views: Number(row.views),
+    }));
+
+    // 5. Recent events (last 50, with user names if known)
+    const recentRaw = await this.prisma.analyticsEvent.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        user: { select: { id: true, fullName: true, phone: true } },
+      },
+    });
+
+    const recentEvents = recentRaw.map((ev) => ({
+      id: ev.id,
+      name: ev.name,
+      properties: ev.properties as Record<string, unknown> | null,
+      userId: ev.userId,
+      userName: ev.user?.fullName ?? null,
+      userPhone: ev.user?.phone ?? null,
+      ip: ev.ip,
+      userAgent: ev.userAgent,
+      createdAt: ev.createdAt.toISOString(),
+    }));
+
+    return {
+      totals: {
+        totalUsers,
+        active24h: active24hRows.length,
+        active7d: active7dRows.length,
+        totalApplications,
+        totalEvents,
+      },
+      funnel: funnelCounts,
+      activityByDay: activityByDay.map((row) => ({
+        day: row.day.toISOString().slice(0, 10),
+        count: Number(row.count),
+      })),
+      topWorkshops,
+      recentEvents,
+    };
+  }
 }
