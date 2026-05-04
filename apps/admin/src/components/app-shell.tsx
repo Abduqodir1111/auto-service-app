@@ -4,6 +4,7 @@ import { useAuth } from '../features/auth/auth-provider';
 const links = [
   ['/', 'Сводка'],
   ['/analytics', 'Аналитика'],
+  ['/testers', 'Активность тестеров'],
   ['/users', 'Пользователи'],
   ['/workshops', 'СТО'],
   ['/reviews', 'Отзывы'],
