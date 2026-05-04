@@ -11,6 +11,7 @@ const reportTargetLabels: Record<ReportTargetType, string> = {
   [ReportTargetType.WORKSHOP]: 'Объявление',
   [ReportTargetType.PHOTO]: 'Фото',
   [ReportTargetType.REVIEW]: 'Отзыв',
+  [ReportTargetType.SERVICE_CALL]: 'Срочный вызов',
 };
 
 function getReportTone(status: ReportStatus) {
