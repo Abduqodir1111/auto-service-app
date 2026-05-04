@@ -2,8 +2,8 @@ import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { PhotoStatus, UserRole, WorkshopDetails, WorkshopStatus } from '@stomvp/shared';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AuthUser, PhotoStatus, UserRole, WorkshopDetails, WorkshopStatus } from '@stomvp/shared';
+import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
@@ -108,6 +108,21 @@ export default function ProfileScreen() {
       );
     },
   });
+  const setOnlineMutation = useMutation({
+    mutationFn: async (isOnline: boolean) => {
+      const { data } = await api.post<AuthUser>('/users/me/online-status', { isOnline });
+      return data;
+    },
+    onSuccess: async (user) => {
+      const current = useAuthStore.getState().session;
+      if (current) {
+        await setSession({ ...current, user });
+      }
+    },
+    onError: () => {
+      Alert.alert('Ошибка', 'Не удалось изменить статус. Попробуйте ещё раз.');
+    },
+  });
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
       await api.delete('/users/me');
@@ -149,6 +164,25 @@ export default function ProfileScreen() {
 
       {session?.user.role === UserRole.MASTER ? (
         <>
+          <View style={[styles.card, styles.onlineCard]}>
+            <View style={styles.onlineRow}>
+              <View style={styles.onlineCopy}>
+                <Text style={styles.sectionTitle}>Принимать срочные вызовы</Text>
+                <Text style={styles.muted}>
+                  Когда включено, к вам будут приходить срочные вызовы от клиентов рядом.
+                  Звуковое уведомление + 30 секунд на ответ.
+                </Text>
+              </View>
+              <Switch
+                value={Boolean(session.user.isMasterOnline)}
+                onValueChange={(value) => setOnlineMutation.mutate(value)}
+                disabled={setOnlineMutation.isPending}
+                trackColor={{ false: '#E0E0E0', true: colors.success }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Мои объявления</Text>
             <Text style={styles.muted}>
@@ -551,6 +585,19 @@ const styles = StyleSheet.create({
   accountDangerCard: {
     borderColor: '#F1B3A7',
     backgroundColor: '#FFF9F6',
+  },
+  onlineCard: {
+    backgroundColor: '#FFF7F2',
+    borderColor: '#F1D1BC',
+  },
+  onlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  onlineCopy: {
+    flex: 1,
+    gap: 4,
   },
   deleteAccountButton: {
     paddingHorizontal: 16,
