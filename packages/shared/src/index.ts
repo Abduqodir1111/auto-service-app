@@ -35,6 +35,15 @@ export enum ReportTargetType {
   WORKSHOP = 'WORKSHOP',
   PHOTO = 'PHOTO',
   REVIEW = 'REVIEW',
+  SERVICE_CALL = 'SERVICE_CALL',
+}
+
+export enum ServiceCallStatus {
+  SEARCHING = 'SEARCHING',
+  ASSIGNED = 'ASSIGNED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  NO_MASTERS = 'NO_MASTERS',
 }
 
 export enum ReportStatus {
@@ -81,6 +90,8 @@ export type AuthUser = {
   role: UserRole;
   isBlocked: boolean;
   isVerifiedMaster: boolean;
+  /** True when a MASTER opted in to receive on-demand service calls. */
+  isMasterOnline?: boolean;
   createdAt: string;
 };
 
@@ -182,4 +193,33 @@ export type ReportItem = {
   resolution?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ServiceCallItem = {
+  id: string;
+  clientId: string;
+  categoryId: string;
+  lat: number;
+  lng: number;
+  address?: string | null;
+  clientPhone: string;
+  description?: string | null;
+  status: ServiceCallStatus;
+  candidateMasterIds: string[];
+  currentCandidateIdx: number;
+  currentExpiresAt?: string | null;
+  assignedMasterId?: string | null;
+  assignedAt?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+  assignedMaster?: {
+    id: string;
+    fullName: string;
+    phone: string;
+  } | null;
+  client?: {
+    id: string;
+    fullName: string;
+    phone: string;
+  } | null;
 };

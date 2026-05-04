@@ -1,8 +1,8 @@
-import { Stack } from 'expo-router';
-import { AuthUser } from '@stomvp/shared';
+import { router, Stack } from 'expo-router';
+import { AuthUser, ServiceCallItem, ServiceCallStatus, UserRole } from '@stomvp/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { ActivityIndicator, AppState, View } from 'react-native';
 import { api } from '../src/api/client';
 import { colors } from '../src/constants/theme';
 import { useAuthStore } from '../src/store/auth-store';
@@ -10,6 +10,7 @@ import { track } from '../src/utils/analytics';
 import {
   getPushTokenForDevice,
   installNotificationHandler,
+  installNotificationResponseHandler,
   registerPushTokenWithServer,
 } from '../src/utils/push-notifications';
 
@@ -19,6 +20,8 @@ const queryClient = new QueryClient();
 // before any component mounts — so the very first push received in this
 // process surfaces a banner.
 installNotificationHandler();
+// React to taps on pushes (e.g. master taps incoming-call → navigate).
+installNotificationResponseHandler();
 
 export default function RootLayout() {
   const hydrated = useAuthStore((state) => state.hydrated);
@@ -99,6 +102,40 @@ export default function RootLayout() {
     };
   }, [hydrated, session?.accessToken, session?.user?.id]);
 
+  // Master-only: poll for any ringing service call when the app comes to
+  // foreground, in case the push was missed (DND, app killed, etc.). If
+  // there's a live call ringing this master, jump to the swipe screen.
+  const lastSeenCallId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hydrated || !session?.accessToken || session.user.role !== UserRole.MASTER) {
+      return;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const { data } = await api.get<ServiceCallItem | null>('/service-calls/master/active');
+        if (cancelled || !data) return;
+        if (
+          data.status === ServiceCallStatus.SEARCHING &&
+          lastSeenCallId.current !== data.id
+        ) {
+          lastSeenCallId.current = data.id;
+          router.push(`/master/incoming-call/${data.id}`);
+        }
+      } catch {
+        // Silent — this is best-effort.
+      }
+    };
+    void poll();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void poll();
+    });
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, [hydrated, session?.accessToken, session?.user?.id, session?.user?.role]);
+
   if (!hydrated) {
     return (
       <View
@@ -139,6 +176,12 @@ export default function RootLayout() {
         <Stack.Screen name="map/view" options={{ title: 'Локация СТО' }} />
         <Stack.Screen name="requests/create" options={{ title: 'Новая заявка' }} />
         <Stack.Screen name="master/workshop" options={{ title: 'Объявление мастера' }} />
+        <Stack.Screen name="call/index" options={{ title: 'Вызвать мастера' }} />
+        <Stack.Screen name="call/[id]" options={{ title: 'Вызов', headerBackVisible: false }} />
+        <Stack.Screen
+          name="master/incoming-call/[id]"
+          options={{ title: 'Срочный вызов', headerShown: false, gestureEnabled: false }}
+        />
       </Stack>
     </QueryClientProvider>
   );

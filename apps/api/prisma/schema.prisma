@@ -44,6 +44,7 @@ enum ReportTargetType {
   WORKSHOP
   PHOTO
   REVIEW
+  SERVICE_CALL
 }
 
 enum ReportStatus {
@@ -81,6 +82,10 @@ model User {
   role                 UserRole         @default(CLIENT)
   isBlocked            Boolean          @default(false)
   isVerifiedMaster     Boolean          @default(false)
+  /// Master-only opt-in: when true, this master may receive urgent
+  /// "service call" pushes (Yandex-Taxi-style on-demand requests).
+  /// Default is false — master must explicitly enable in settings.
+  isMasterOnline       Boolean          @default(false)
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
   workshops            Workshop[]       @relation("WorkshopOwner")
@@ -92,6 +97,8 @@ model User {
   moderationLogs       ModerationLog[]  @relation("ModerationActor")
   deviceTokens         DeviceToken[]
   analyticsEvents      AnalyticsEvent[]
+  clientCalls          ServiceCall[]    @relation("ServiceCallClient")
+  assignedCalls        ServiceCall[]    @relation("ServiceCallAssignedMaster")
 }
 
 enum DevicePlatform {
@@ -275,6 +282,65 @@ model ModerationLog {
   @@index([entityType, entityId])
   @@index([actorId])
   @@index([createdAt])
+}
+
+enum ServiceCallStatus {
+  /// Dispatcher is offering the call to candidate masters in turn.
+  SEARCHING
+  /// A master accepted; client now has master's contact and is waiting for arrival.
+  ASSIGNED
+  /// Client marked the job as done.
+  COMPLETED
+  /// Client cancelled while still SEARCHING (or after ASSIGNED if master was no-show).
+  CANCELLED
+  /// Every candidate either rejected or timed out — nobody available right now.
+  NO_MASTERS
+}
+
+/// On-demand "call a master" request. Unlike Application (which targets one
+/// specific workshop), a ServiceCall is broadcast in-turn to nearby masters
+/// matching the chosen category. The dispatcher (cron) walks
+/// `candidateMasterIds` from index 0 upward — pushing each master a 30s
+/// notification window. First master to accept gets the job.
+model ServiceCall {
+  id          String  @id @default(uuid()) @db.Uuid
+  clientId    String  @db.Uuid
+  categoryId  String  @db.Uuid
+  /// Coordinates the client picked on the map (where the master should come).
+  lat         Float
+  lng         Float
+  address     String?
+  /// Phone the master will call (defaults to client's profile phone, but the
+  /// client can edit it on the call screen — e.g. to leave a partner's number).
+  clientPhone String
+  description String?
+
+  status ServiceCallStatus @default(SEARCHING)
+
+  /// Sorted list of candidate master ids (closest first). Persisted as an
+  /// array because the dispatcher cron rotates through it across restarts.
+  candidateMasterIds  String[]  @db.Uuid
+  /// Pointer into candidateMasterIds. The current "ringing" master is at
+  /// `candidateMasterIds[currentCandidateIdx]` until they accept, reject,
+  /// or `currentExpiresAt` passes.
+  currentCandidateIdx Int       @default(0)
+  /// When the current candidate's 30s window expires. Cron polls and
+  /// advances the index when this slips into the past.
+  currentExpiresAt    DateTime?
+
+  assignedMasterId String?   @db.Uuid
+  assignedAt       DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  client         User  @relation("ServiceCallClient", fields: [clientId], references: [id], onDelete: Cascade)
+  assignedMaster User? @relation("ServiceCallAssignedMaster", fields: [assignedMasterId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([assignedMasterId, status])
+  @@index([status, currentExpiresAt])
 }
 
 /// Lightweight product-analytics log. Mobile / admin POST events here;

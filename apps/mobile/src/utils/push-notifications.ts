@@ -15,10 +15,34 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import { router } from 'expo-router';
 import { Platform } from 'react-native';
 import { api } from '../api/client';
 
 let handlerInstalled = false;
+let responseListenerInstalled = false;
+
+/**
+ * Subscribe to taps on incoming pushes. Service-call pushes carry
+ * `data.type='service_call.incoming'` and `data.callId`; the master
+ * tapping the notification should land on the swipe-to-accept screen.
+ * Other types fall through to default routing.
+ */
+export function installNotificationResponseHandler(): void {
+  if (responseListenerInstalled) return;
+  responseListenerInstalled = true;
+  Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = response.notification.request.content.data as
+      | { type?: string; callId?: string }
+      | undefined;
+    if (!data) return;
+    if (data.type === 'service_call.incoming' && data.callId) {
+      router.push(`/master/incoming-call/${data.callId}`);
+    } else if (data.type === 'service_call.assigned' && data.callId) {
+      router.push(`/call/${data.callId}`);
+    }
+  });
+}
 
 /**
  * Install the foreground handler. Idempotent — calling twice is fine.
@@ -44,6 +68,20 @@ async function ensureAndroidChannel(): Promise<void> {
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#F4934A',
+  });
+  // 'urgent' channel for on-demand service calls — like an incoming-taxi
+  // ringtone. MAX importance + bypass DND so the master notices even with
+  // the phone face-down. Backend pushes service_call.* events here.
+  await Notifications.setNotificationChannelAsync('urgent', {
+    name: 'Срочные вызовы',
+    description: 'Уведомления о срочных вызовах от клиентов',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 500, 250, 500, 250, 500],
+    lightColor: '#FF3B30',
+    bypassDnd: true,
+    enableLights: true,
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
 }
 

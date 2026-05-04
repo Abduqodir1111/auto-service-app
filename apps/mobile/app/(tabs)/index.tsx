@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -14,13 +15,14 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { ServiceCategory, WorkshopSummary } from '@stomvp/shared';
+import { ServiceCategory, UserRole, WorkshopSummary } from '@stomvp/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../../components/screen';
 import { WorkshopCard } from '../../components/workshop-card';
 import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
+import { useAuthStore } from '../../src/store/auth-store';
 import { type Coordinates, getDeviceCoordinates } from '../../src/utils/device-location';
 import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
 
@@ -48,6 +50,7 @@ export default function CatalogScreen() {
   const filterRailRef = useRef<ScrollView>(null);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const role = useAuthStore((state) => state.session?.user.role);
 
   const categoriesQuery = useQuery({
     queryKey: ['categories'],
@@ -208,6 +211,21 @@ export default function CatalogScreen() {
         </Animated.View>
       </View>
 
+      {role === UserRole.CLIENT ? (
+        <Pressable onPress={() => router.push('/call')} style={styles.callMasterButton}>
+          <View style={styles.callMasterIconWrap}>
+            <Ionicons name="alert" size={22} color="#FFFFFF" />
+          </View>
+          <View style={styles.callMasterCopy}>
+            <Text style={styles.callMasterTitle}>Срочный вызов мастера</Text>
+            <Text style={styles.callMasterSubtitle}>
+              Ближайший доступный мастер позвонит вам
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+        </Pressable>
+      ) : null}
+
       <ScrollView
         ref={filterRailRef}
         horizontal
@@ -350,6 +368,37 @@ const styles = StyleSheet.create({
   filterRail: {
     gap: 12,
     paddingRight: 16,
+  },
+  callMasterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    backgroundColor: '#D75A43',
+    marginBottom: 4,
+  },
+  callMasterIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callMasterCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  callMasterTitle: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  callMasterSubtitle: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 13,
   },
   filterCard: {
     width: 126,

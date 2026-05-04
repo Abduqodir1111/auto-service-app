@@ -38,8 +38,21 @@ export class UsersService {
       role: user.role,
       isBlocked: user.isBlocked,
       isVerifiedMaster: user.isVerifiedMaster,
+      isMasterOnline: user.isMasterOnline,
       createdAt: user.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Master toggles their availability to receive on-demand service calls.
+   * No-op for clients/admins (they get the same value back unchanged).
+   */
+  async setOnlineStatus(userId: string, isOnline: boolean) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { isMasterOnline: isOnline },
+    });
+    return this.serialize(user);
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {

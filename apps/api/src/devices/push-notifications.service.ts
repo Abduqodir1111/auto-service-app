@@ -5,11 +5,19 @@ import { DevicesService } from './devices.service';
 /**
  * Payload accepted by Expo's push API. We expose just the bits we use,
  * the full type is documented at https://docs.expo.dev/push-notifications/sending-notifications/
+ *
+ * `channelId` lets callers route certain pushes to a louder Android channel
+ * — e.g. service-call pushes use 'urgent' which the mobile app declares
+ * with a custom ringtone-style sound. Defaults to 'default'.
  */
 export type PushPayload = {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  /** Android notification channel id. Defaults to 'default'. */
+  channelId?: string;
+  /** iOS push sound. 'default' is the system bing; 'urgent' tries the bundled custom sound. */
+  sound?: 'default' | string;
 };
 
 type ExpoMessage = {
@@ -17,7 +25,7 @@ type ExpoMessage = {
   title: string;
   body: string;
   data: Record<string, unknown>;
-  sound: 'default';
+  sound: string;
   priority: 'high';
   channelId?: string;
 };
@@ -72,9 +80,9 @@ export class PushNotificationsService {
       title: payload.title,
       body: payload.body,
       data: payload.data ?? {},
-      sound: 'default',
+      sound: payload.sound ?? 'default',
       priority: 'high',
-      channelId: 'default',
+      channelId: payload.channelId ?? 'default',
     }));
 
     let response: Response;
