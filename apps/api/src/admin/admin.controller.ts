@@ -33,6 +33,11 @@ export class AdminController {
     return this.adminService.getEventsAnalytics();
   }
 
+  @Get('analytics/testers')
+  testersActivity() {
+    return this.adminService.getTestersActivity();
+  }
+
   @Get('users')
   users() {
     return this.adminService.listUsers();

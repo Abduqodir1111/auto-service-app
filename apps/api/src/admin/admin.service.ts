@@ -353,4 +353,120 @@ export class AdminService {
       recentEvents,
     };
   }
+
+  /**
+   * Per-user activity breakdown for the closed-testing window. Returns one
+   * row per non-admin user with: registration date, last seen, total event
+   * count, a daily heat-map (last `daysBack` days) and a per-event-name
+   * counter. Used by the admin "Activity of testers" page to spot who
+   * opted in but never opens the app vs who's actively using it.
+   *
+   * Note: AnalyticsEvent rows from before sign-up have `userId = null` so
+   * they don't show up here. That's fine — we only care about logged-in
+   * activity per tester.
+   */
+  async getTestersActivity(daysBack = 14) {
+    const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+
+    // 1. Pull every non-admin user (clients + masters); 12-tester scale
+    // makes this trivially small.
+    const users = await this.prisma.user.findMany({
+      where: { role: { not: 'ADMIN' } },
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        role: true,
+        isBlocked: true,
+        isVerifiedMaster: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (users.length === 0) {
+      return { daysBack, days: this.makeDayList(daysBack), users: [] };
+    }
+
+    // 2. SQL-side aggregate: per (user, day, eventName) counts. The
+    // alternative (Node-side group) would pull every event row.
+    const buckets = await this.prisma.$queryRaw<
+      Array<{ userId: string; day: string; name: string; cnt: bigint }>
+    >`
+      SELECT
+        "userId",
+        to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day,
+        "name",
+        COUNT(*)::bigint AS cnt
+      FROM "AnalyticsEvent"
+      WHERE "userId" IS NOT NULL AND "createdAt" >= ${since}
+      GROUP BY "userId", day, "name"
+    `;
+
+    // 3. Last seen per user (for the "last activity" column).
+    const lastSeenRows = await this.prisma.$queryRaw<
+      Array<{ userId: string; lastSeen: Date }>
+    >`
+      SELECT "userId", MAX("createdAt") AS "lastSeen"
+      FROM "AnalyticsEvent"
+      WHERE "userId" IS NOT NULL
+      GROUP BY "userId"
+    `;
+    const lastSeenByUser = new Map(
+      lastSeenRows.map((row) => [row.userId, row.lastSeen]),
+    );
+
+    // 4. Stitch it all together. Building lookup tables once instead of
+    // O(n) filter inside the map keeps this O(events + users).
+    const bucketByUser = new Map<
+      string,
+      Array<{ day: string; name: string; cnt: number }>
+    >();
+    for (const b of buckets) {
+      const list = bucketByUser.get(b.userId) ?? [];
+      list.push({ day: b.day, name: b.name, cnt: Number(b.cnt) });
+      bucketByUser.set(b.userId, list);
+    }
+
+    return {
+      daysBack,
+      days: this.makeDayList(daysBack),
+      users: users.map((u) => {
+        const items = bucketByUser.get(u.id) ?? [];
+        const eventsByDay: Record<string, number> = {};
+        const eventsByName: Record<string, number> = {};
+        let totalEvents = 0;
+        for (const it of items) {
+          eventsByDay[it.day] = (eventsByDay[it.day] ?? 0) + it.cnt;
+          eventsByName[it.name] = (eventsByName[it.name] ?? 0) + it.cnt;
+          totalEvents += it.cnt;
+        }
+        return {
+          id: u.id,
+          fullName: u.fullName,
+          phone: u.phone,
+          role: u.role,
+          isBlocked: u.isBlocked,
+          isVerifiedMaster: u.isVerifiedMaster,
+          createdAt: u.createdAt.toISOString(),
+          lastSeenAt: lastSeenByUser.get(u.id)?.toISOString() ?? null,
+          totalEvents,
+          eventsByDay,
+          eventsByName,
+        };
+      }),
+    };
+  }
+
+  /** Most-recent-first list of YYYY-MM-DD strings, used as table headers. */
+  private makeDayList(daysBack: number): string[] {
+    const out: string[] = [];
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    for (let i = 0; i < daysBack; i++) {
+      const d = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+      out.push(d.toISOString().slice(0, 10));
+    }
+    return out;
+  }
 }

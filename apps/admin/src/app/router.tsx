@@ -12,6 +12,7 @@ import { PrivacyPage } from '../pages/privacy-page';
 import { ReportsPage } from '../pages/reports-page';
 import { ReviewsPage } from '../pages/reviews-page';
 import { SupportPage } from '../pages/support-page';
+import { TestersActivityPage } from '../pages/testers-activity-page';
 import { UsersPage } from '../pages/users-page';
 import { WorkshopsPage } from '../pages/workshops-page';
 
@@ -40,6 +41,7 @@ export function AppRouter() {
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/testers" element={<TestersActivityPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/workshops" element={<WorkshopsPage />} />
         <Route path="/reviews" element={<ReviewsPage />} />
