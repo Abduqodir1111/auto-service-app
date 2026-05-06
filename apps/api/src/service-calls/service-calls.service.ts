@@ -415,14 +415,14 @@ export class ServiceCallsService implements OnModuleInit, OnModuleDestroy {
     if (!call.assignedMasterId) {
       throw new BadRequestException('Cannot complain on a call with no assigned master');
     }
-    const masterId = call.assignedMasterId;
     const report = await this.prisma.report.create({
       data: {
         reporterId: userId,
         targetType: ReportTargetType.SERVICE_CALL,
         targetId: id,
+        accusedUserId: call.assignedMasterId,
         reason: dto.reason,
-        comment: dto.comment ? `[master:${masterId}] ${dto.comment}` : `[master:${masterId}]`,
+        comment: dto.comment ?? null,
       },
     });
     return { id: report.id, status: report.status };
