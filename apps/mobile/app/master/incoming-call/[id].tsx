@@ -18,6 +18,9 @@ import { ServiceCallItem, ServiceCallStatus } from '@stomvp/shared';
 import { Screen } from '../../../components/screen';
 import { api } from '../../../src/api/client';
 import { colors } from '../../../src/constants/theme';
+import { getDeviceCoordinates } from '../../../src/utils/device-location';
+
+const MASTER_LOCATION_INTERVAL_MS = 15_000;
 
 const SWIPE_TRACK_HEIGHT = 70;
 const ACCEPT_THRESHOLD_RATIO = 0.65;
@@ -77,6 +80,32 @@ export default function MasterIncomingCallScreen() {
   });
 
   const call = callQuery.data;
+
+  // While ASSIGNED, push the master's GPS to the server every 15s so
+  // the client can render a live "where is the master right now" pin
+  // and ETA. We bail as soon as the call leaves ASSIGNED.
+  useEffect(() => {
+    if (call?.status !== ServiceCallStatus.ASSIGNED) return;
+    let cancelled = false;
+    const send = async () => {
+      try {
+        const result = await getDeviceCoordinates(null);
+        if (cancelled || !result.coordinates) return;
+        await api.post(`/service-calls/${id}/master-location`, {
+          lat: result.coordinates.latitude,
+          lng: result.coordinates.longitude,
+        });
+      } catch {
+        // best-effort — next tick will retry
+      }
+    };
+    void send();
+    const timer = setInterval(send, MASTER_LOCATION_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [call?.status, id]);
 
   if (callQuery.isLoading || !call) {
     return (

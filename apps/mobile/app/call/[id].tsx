@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +14,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { ServiceCallItem, ServiceCallStatus } from '@stomvp/shared';
+import { haversineKm } from '../../components/call-status-banner';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
@@ -67,7 +69,9 @@ export default function CallStatusScreen() {
         status === ServiceCallStatus.CANCELLED ||
         status === ServiceCallStatus.NO_MASTERS
       ) {
-        return status === ServiceCallStatus.ASSIGNED ? POLL_INTERVAL_MS * 5 : false;
+        // While ASSIGNED keep polling every 5s — master pushes location
+        // every 15s, so 5s gives us a fresh fix within ~3x master ticks.
+        return status === ServiceCallStatus.ASSIGNED ? 5_000 : false;
       }
       return POLL_INTERVAL_MS;
     },
@@ -212,6 +216,12 @@ export default function CallStatusScreen() {
 
   // ASSIGNED
   const master = call.assignedMaster;
+  const distanceKm =
+    call.masterLat != null && call.masterLng != null
+      ? haversineKm(call.lat, call.lng, call.masterLat, call.masterLng)
+      : null;
+  const etaMin = distanceKm != null ? Math.max(1, Math.round((distanceKm / 25) * 60)) : null;
+
   return (
     <Screen>
       <View style={styles.assignedCard}>
@@ -219,7 +229,30 @@ export default function CallStatusScreen() {
         <Text style={styles.assignedTitle}>Мастер найден</Text>
         <Text style={styles.assignedName}>{master?.fullName ?? 'Мастер'}</Text>
         <Text style={styles.muted}>{master?.phone ?? ''}</Text>
+        {distanceKm != null ? (
+          <View style={styles.etaRow}>
+            <View style={styles.etaPill}>
+              <Ionicons name="navigate" size={14} color={colors.success} />
+              <Text style={styles.etaText}>~{distanceKm.toFixed(1)} км</Text>
+            </View>
+            {etaMin != null ? (
+              <View style={styles.etaPill}>
+                <Ionicons name="time-outline" size={14} color={colors.success} />
+                <Text style={styles.etaText}>~{etaMin} мин</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : (
+          <Text style={styles.muted}>Мастер скоро поделится своей локацией</Text>
+        )}
       </View>
+
+      <TrackingMap
+        clientLat={call.lat}
+        clientLng={call.lng}
+        masterLat={call.masterLat ?? null}
+        masterLng={call.masterLng ?? null}
+      />
 
       <Pressable
         onPress={() => master?.phone && Linking.openURL(`tel:${master.phone}`)}
@@ -284,6 +317,86 @@ function formatElapsed(sec: number) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Live tracking map: green pin = client, orange pin = master, dashed
+ * line between them. We rebuild the HTML on every coord change rather
+ * than messaging into the WebView — simpler, perf is fine for a 1Hz
+ * update over WebView in a single mounted screen.
+ */
+function TrackingMap({
+  clientLat,
+  clientLng,
+  masterLat,
+  masterLng,
+}: {
+  clientLat: number;
+  clientLng: number;
+  masterLat: number | null;
+  masterLng: number | null;
+}) {
+  // Round to ~10m so tiny GPS jitter doesn't trigger a full HTML rebuild.
+  const mLat = masterLat != null ? Math.round(masterLat * 10000) / 10000 : null;
+  const mLng = masterLng != null ? Math.round(masterLng * 10000) / 10000 : null;
+
+  const html = useMemo(
+    () => buildTrackingHtml(clientLat, clientLng, mLat, mLng),
+    [clientLat, clientLng, mLat, mLng],
+  );
+  return (
+    <View style={styles.mapCard}>
+      <WebView
+        source={{ html }}
+        originWhitelist={['*']}
+        style={styles.mapWebview}
+        scrollEnabled={false}
+      />
+    </View>
+  );
+}
+
+function buildTrackingHtml(
+  cLat: number,
+  cLng: number,
+  mLat: number | null,
+  mLng: number | null,
+) {
+  const hasMaster = mLat != null && mLng != null;
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+html, body, #map { margin:0; padding:0; height:100%; width:100%; background:#F4EFE7; }
+.pin { width:32px; height:32px; border-radius:16px; border:3px solid #FFF; box-shadow:0 2px 6px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:#FFF; font-weight:800; font-size:14px; }
+.pin.client { background:#3FA76C; }
+.pin.master { background:#F4934A; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map', { zoomControl: false, attributionControl: false });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+const clientLatLng = [${cLat}, ${cLng}];
+const clientIcon = L.divIcon({ html: '<div class="pin client">К</div>', className: '', iconSize: [32, 32], iconAnchor: [16, 16] });
+const clientMarker = L.marker(clientLatLng, { icon: clientIcon }).addTo(map);
+${
+  hasMaster
+    ? `const masterLatLng = [${mLat}, ${mLng}];
+const masterIcon = L.divIcon({ html: '<div class="pin master">М</div>', className: '', iconSize: [32, 32], iconAnchor: [16, 16] });
+const masterMarker = L.marker(masterLatLng, { icon: masterIcon }).addTo(map);
+const route = L.polyline([clientLatLng, masterLatLng], { color: '#F4934A', weight: 4, dashArray: '8 6', opacity: 0.85 }).addTo(map);
+map.fitBounds(L.latLngBounds([clientLatLng, masterLatLng]).pad(0.5));`
+    : `map.setView(clientLatLng, 14);`
+}
+</script>
+</body>
+</html>`;
 }
 
 const styles = StyleSheet.create({
@@ -436,4 +549,39 @@ const styles = StyleSheet.create({
   },
   flex1: { flex: 1 },
   disabled: { opacity: 0.5 },
+  etaRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  etaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#E5F4EE',
+    borderWidth: 1,
+    borderColor: '#BDDDC8',
+  },
+  etaText: {
+    color: colors.success,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  mapCard: {
+    height: 240,
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  mapWebview: {
+    flex: 1,
+    backgroundColor: '#F4EFE7',
+  },
 });

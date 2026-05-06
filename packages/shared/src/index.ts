@@ -210,6 +210,10 @@ export type ServiceCallItem = {
   currentExpiresAt?: string | null;
   assignedMasterId?: string | null;
   assignedAt?: string | null;
+  /** Live position of the assigned master while heading to the client. */
+  masterLat?: number | null;
+  masterLng?: number | null;
+  masterLocationUpdatedAt?: string | null;
   createdAt: string;
   completedAt?: string | null;
   assignedMaster?: {

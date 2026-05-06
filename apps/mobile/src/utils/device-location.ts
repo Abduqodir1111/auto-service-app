@@ -23,15 +23,15 @@ function isIosSimulatorSanFrancisco(location: Coordinates) {
   );
 }
 
-function normalizeDeviceLocation(location: Coordinates, fallback: Coordinates) {
-  if (isIosSimulatorSanFrancisco(location)) {
+function normalizeDeviceLocation(location: Coordinates, fallback: Coordinates | null) {
+  if (fallback && isIosSimulatorSanFrancisco(location)) {
     return fallback;
   }
 
   return location;
 }
 
-function toCoordinates(location: Location.LocationObject, fallback: Coordinates) {
+function toCoordinates(location: Location.LocationObject, fallback: Coordinates | null) {
   return normalizeDeviceLocation(
     {
       latitude: location.coords.latitude,
@@ -42,7 +42,7 @@ function toCoordinates(location: Location.LocationObject, fallback: Coordinates)
 }
 
 export async function getDeviceCoordinates(
-  fallback: Coordinates,
+  fallback: Coordinates | null,
 ): Promise<DeviceLocationResult> {
   let permission = await Location.getForegroundPermissionsAsync();
 

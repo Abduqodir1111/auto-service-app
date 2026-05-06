@@ -335,6 +335,14 @@ model ServiceCall {
   assignedMasterId String?   @db.Uuid
   assignedAt       DateTime?
 
+  /// Live position of the assigned master while ASSIGNED. Master's app
+  /// posts these every ~15s; client polls `/service-calls/:id` and
+  /// renders an updated marker + straight-line "route" + ETA. Cleared on
+  /// terminal status.
+  masterLat               Float?
+  masterLng               Float?
+  masterLocationUpdatedAt DateTime?
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   completedAt DateTime?

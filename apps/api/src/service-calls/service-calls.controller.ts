@@ -12,6 +12,7 @@ import { CurrentUser, JwtUser } from '../common/decorators/current-user.decorato
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CreateServiceCallDto } from './dto/create-service-call.dto';
 import { ComplainServiceCallDto } from './dto/complain-service-call.dto';
+import { MasterLocationDto } from './dto/master-location.dto';
 import { ServiceCallsService } from './service-calls.service';
 
 @ApiTags('service-calls')
@@ -44,6 +45,29 @@ export class ServiceCallsController {
   @Get('master/active')
   getActiveForMaster(@CurrentUser() user: JwtUser) {
     return this.service.getActiveForMaster(user.sub);
+  }
+
+  /**
+   * Client polls this from the home screen so the "Срочный вызов" card
+   * can morph into a live status card (SEARCHING progress / ASSIGNED with
+   * master info). Returns null when no live call.
+   */
+  @Get('client/active')
+  getActiveForClient(@CurrentUser() user: JwtUser) {
+    return this.service.getActiveForClient(user.sub);
+  }
+
+  /**
+   * Master pushes their current GPS while heading to the client. Allowed
+   * only for the assigned master and only while the call is ASSIGNED.
+   */
+  @Post(':id/master-location')
+  reportMasterLocation(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: JwtUser,
+    @Body() dto: MasterLocationDto,
+  ) {
+    return this.service.reportMasterLocation(id, user.sub, dto);
   }
 
   /** Master swipe-accepts. */

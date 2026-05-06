@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { ServiceCategory, UserRole, WorkshopSummary } from '@stomvp/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CallStatusBanner } from '../../components/call-status-banner';
 import { Screen } from '../../components/screen';
 import { WorkshopCard } from '../../components/workshop-card';
 import { api } from '../../src/api/client';
@@ -211,20 +212,7 @@ export default function CatalogScreen() {
         </Animated.View>
       </View>
 
-      {role === UserRole.CLIENT ? (
-        <Pressable onPress={() => router.push('/call')} style={styles.callMasterButton}>
-          <View style={styles.callMasterIconWrap}>
-            <Ionicons name="alert" size={22} color="#FFFFFF" />
-          </View>
-          <View style={styles.callMasterCopy}>
-            <Text style={styles.callMasterTitle}>Срочный вызов мастера</Text>
-            <Text style={styles.callMasterSubtitle}>
-              Ближайший доступный мастер позвонит вам
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
-        </Pressable>
-      ) : null}
+      {role === UserRole.CLIENT ? <CallStatusBanner /> : null}
 
       <ScrollView
         ref={filterRailRef}

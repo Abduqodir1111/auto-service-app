@@ -20,6 +20,7 @@ import { PrismaService } from '../database/prisma.service';
 import { PushNotificationsService } from '../devices/push-notifications.service';
 import { CreateServiceCallDto } from './dto/create-service-call.dto';
 import { ComplainServiceCallDto } from './dto/complain-service-call.dto';
+import { MasterLocationDto } from './dto/master-location.dto';
 
 /**
  * Per-candidate ringing window. Every master has exactly this many seconds
@@ -212,6 +213,53 @@ export class ServiceCallsService implements OnModuleInit, OnModuleDestroy {
       orderBy: { createdAt: 'desc' },
     });
     return assigned ? this.serialize(assigned) : null;
+  }
+
+  /**
+   * Live call for the client's home banner — either SEARCHING (still
+   * ringing masters) or ASSIGNED (master accepted, on the way). Excludes
+   * terminal states so the banner disappears when nothing's happening.
+   */
+  async getActiveForClient(clientId: string) {
+    const call = await this.prisma.serviceCall.findFirst({
+      where: {
+        clientId,
+        status: { in: [ServiceCallStatus.SEARCHING, ServiceCallStatus.ASSIGNED] },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        assignedMaster: { select: { id: true, fullName: true, phone: true } },
+      },
+    });
+    return call ? this.serialize(call) : null;
+  }
+
+  /**
+   * Master pushes their live GPS while ASSIGNED. We don't validate
+   * distance from the call origin or anything fancy — just store the
+   * latest fix. Client polling reads `masterLat`/`masterLng` and renders.
+   */
+  async reportMasterLocation(id: string, masterId: string, dto: MasterLocationDto) {
+    const call = await this.prisma.serviceCall.findUnique({ where: { id } });
+    if (!call) throw new NotFoundException('Call not found');
+    if (call.assignedMasterId !== masterId) {
+      throw new ForbiddenException('Not your call');
+    }
+    if (call.status !== ServiceCallStatus.ASSIGNED) {
+      // Status moved on — silently skip rather than throwing, so the
+      // 15-second client interval doesn't surface noisy errors after
+      // the master closed the screen.
+      return { ok: true, ignored: true };
+    }
+    await this.prisma.serviceCall.update({
+      where: { id },
+      data: {
+        masterLat: dto.lat,
+        masterLng: dto.lng,
+        masterLocationUpdatedAt: new Date(),
+      },
+    });
+    return { ok: true };
   }
 
   /**
@@ -553,6 +601,9 @@ export class ServiceCallsService implements OnModuleInit, OnModuleDestroy {
       currentExpiresAt: call.currentExpiresAt?.toISOString() ?? null,
       assignedMasterId: call.assignedMasterId,
       assignedAt: call.assignedAt?.toISOString() ?? null,
+      masterLat: call.masterLat ?? null,
+      masterLng: call.masterLng ?? null,
+      masterLocationUpdatedAt: call.masterLocationUpdatedAt?.toISOString() ?? null,
       createdAt: call.createdAt.toISOString(),
       completedAt: call.completedAt?.toISOString() ?? null,
       assignedMaster: call.assignedMaster
