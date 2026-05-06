@@ -65,7 +65,8 @@
         "expo-notifications",
         {
           "color": "#F4934A",
-          "defaultChannel": "default"
+          "defaultChannel": "default",
+          "sounds": ["./assets/urgent_call.wav"]
         }
       ]
     ],

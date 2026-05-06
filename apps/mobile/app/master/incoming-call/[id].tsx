@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -9,9 +11,11 @@ import {
   Dimensions,
   Linking,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  Vibration,
   View,
 } from 'react-native';
 import { ServiceCallItem, ServiceCallStatus } from '@stomvp/shared';
@@ -19,6 +23,25 @@ import { Screen } from '../../../components/screen';
 import { api } from '../../../src/api/client';
 import { colors } from '../../../src/constants/theme';
 import { getDeviceCoordinates } from '../../../src/utils/device-location';
+
+// Local asset bundled in apps/mobile/android/app/src/main/res/raw/urgent_call.wav
+// and (for iOS) apps/mobile/ios/urgent_call.caf — Metro doesn't bundle .caf,
+// so we use require() pointing at a JS-side .wav copy if needed. For now,
+// require the .wav from a JS-accessible path. If you don't ship it as a JS
+// asset, expo-av falls back silently and the screen still works without sound.
+//
+// Easier path: copy the wav into apps/mobile/assets/urgent_call.wav and
+// require() it. Below we try-require it and gracefully ignore failure so
+// builds pass even before the asset is present.
+function tryRequireRingtone(): number | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('../../../assets/urgent_call.wav');
+  } catch {
+    return null;
+  }
+}
+const RINGTONE_ASSET = tryRequireRingtone();
 
 const MASTER_LOCATION_INTERVAL_MS = 15_000;
 
@@ -275,6 +298,62 @@ function RingingView({
     const timer = setInterval(tick, 1_000);
     return () => clearInterval(timer);
   }, [expiresAt]);
+
+  // Loop the bundled ringtone + repeat vibration while this screen is up.
+  // Stops on unmount (master accepted/rejected/timed out). Best-effort —
+  // if expo-av fails to load (no ringtone asset, audio focus denied),
+  // the screen still works without sound.
+  useEffect(() => {
+    let sound: Audio.Sound | null = null;
+    let cancelled = false;
+    let hapticTimer: ReturnType<typeof setInterval> | null = null;
+
+    if (RINGTONE_ASSET) {
+      void Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: false,
+      })
+        .then(async () => {
+          if (cancelled) return;
+          const { sound: s } = await Audio.Sound.createAsync(RINGTONE_ASSET, {
+            shouldPlay: true,
+            isLooping: true,
+            volume: 1.0,
+          });
+          if (cancelled) {
+            await s.unloadAsync().catch(() => undefined);
+            return;
+          }
+          sound = s;
+        })
+        .catch(() => undefined);
+    }
+
+    // Phone-style vibration loop. RN Vibration.vibrate(pattern, true) is
+    // Android-only; on iOS we fire short haptic taps periodically since
+    // iOS doesn't allow custom vibration patterns without entitlements.
+    if (Platform.OS === 'android') {
+      Vibration.vibrate([0, 600, 400, 600, 400], true);
+    } else {
+      const tap = () => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+      };
+      tap();
+      hapticTimer = setInterval(tap, 1_500);
+    }
+
+    return () => {
+      cancelled = true;
+      Vibration.cancel();
+      if (hapticTimer) clearInterval(hapticTimer);
+      if (sound) {
+        void sound.stopAsync().catch(() => undefined);
+        void sound.unloadAsync().catch(() => undefined);
+      }
+    };
+  }, []);
 
   const swipeX = useRef(new Animated.Value(0)).current;
   const acceptedRef = useRef(false);
