@@ -31,11 +31,19 @@ export default function RootLayout() {
 
   useEffect(() => {
     hydrate();
-    // Fire app_opened once per process start. Anonymous if user not yet
-    // signed in; track() picks up userId from auth store automatically
-    // after sign-in (subsequent events in this process).
-    track('app_opened');
   }, [hydrate]);
+
+  // Fire app_opened exactly once per process start, AFTER hydrate
+  // resolves — otherwise track() reads a still-empty session and the
+  // event lands anonymous (userId=null), breaking per-user activity
+  // attribution on the admin /testers page.
+  const appOpenedFired = useRef(false);
+  useEffect(() => {
+    if (hydrated && !appOpenedFired.current) {
+      appOpenedFired.current = true;
+      track('app_opened');
+    }
+  }, [hydrated]);
 
   useEffect(() => {
     const accessToken = session?.accessToken;
