@@ -17,6 +17,14 @@ import { VerifySignUpCodeDto } from './dto/verify-sign-up-code.dto';
 import { formatUzPhoneForStorage } from './auth.utils';
 import { SmsAuthService } from './sms-auth.service';
 
+// Precomputed bcrypt hash (cost 10) used as a comparand when the supplied
+// phone has no matching user. Running compare() against this dummy makes
+// "unknown phone" take the same wall-clock time as "wrong password against
+// a real account" — otherwise an attacker can enumerate registered numbers
+// by measuring login response time.
+const DUMMY_PASSWORD_HASH =
+  '$2b$10$TUyKoA58DBCmovoscHH4IuCy4Dpqp1VgnT1thetnls.taaEl8O2jG';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -76,18 +84,19 @@ export class AuthService {
       where: { phone: normalizedPhone },
     });
 
-    if (!user) {
+    // Always run bcrypt — dummy hash when no user — so every failure path
+    // takes the same wall-clock time. Prevents phone-number enumeration.
+    const passwordMatches = await compare(
+      dto.password,
+      user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+    );
+
+    if (!user || !passwordMatches) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (user.isBlocked) {
       throw new UnauthorizedException('Account is blocked');
-    }
-
-    const passwordMatches = await compare(dto.password, user.passwordHash);
-
-    if (!passwordMatches) {
-      throw new UnauthorizedException('Invalid credentials');
     }
 
     return this.buildAuthResponse(user.id);
