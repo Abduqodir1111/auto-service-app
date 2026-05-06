@@ -36,25 +36,88 @@ export class AnalyticsService {
       });
 
       if (dto.userId && trimmedIp) {
-        // Last 30 minutes is generous enough to catch the pre-login
-        // app_opened, but tight enough to limit cross-user IP collisions
-        // (public Wi-Fi). When userAgent is also known we additionally
-        // require it to match — this drops nearly all multi-user
-        // collisions to zero in practice.
-        const cutoff = new Date(Date.now() - 30 * 60 * 1000);
-        const where: Prisma.AnalyticsEventWhereInput = {
-          userId: null,
-          ip: trimmedIp,
-          createdAt: { gte: cutoff },
-        };
-        if (trimmedUa) where.userAgent = trimmedUa;
-        await this.prisma.analyticsEvent.updateMany({
-          where,
-          data: { userId: dto.userId },
-        });
+        await this.backfillRecentAnonymous(dto.userId, trimmedIp, trimmedUa);
       }
     } catch (err) {
       this.logger.debug(`analytics.track('${dto.name}') failed: ${(err as Error).message}`);
     }
   }
+
+  /**
+   * Two-pass attribution of recent anonymous events to a known user:
+   *
+   *   Pass 1 — exact IP + (optional) user-agent within last 30 minutes.
+   *   Catches the obvious "app_opened fired before session hydrated" case.
+   *
+   *   Pass 2 — same /24 subnet + same user-agent + this user has prior
+   *   history on the same /24 in the last 7 days. Catches small
+   *   IP shuffles within a single ISP customer block. We deliberately
+   *   DON'T go wider (/16) on Uzbek mobile carriers like Beeline because
+   *   they pool hundreds of unrelated subscribers under the same /16,
+   *   which causes false positives where one tester's app_opened gets
+   *   credited to another tester sharing the carrier.
+   *
+   * For precise mobile attribution we'd need a stable device fingerprint
+   * shipped from the client (planned for the production app). Until
+   * then, this is best-effort and may leave a few app_opens unmatched —
+   * the alternative (cross-user collisions) is worse than under-counts.
+   */
+  private async backfillRecentAnonymous(
+    userId: string,
+    ip: string,
+    ua: string | null,
+  ): Promise<void> {
+    const recentCutoff = new Date(Date.now() - 30 * 60 * 1000);
+
+    // Pass 1 — exact IP + UA
+    const exact: Prisma.AnalyticsEventWhereInput = {
+      userId: null,
+      ip,
+      createdAt: { gte: recentCutoff },
+    };
+    if (ua) exact.userAgent = ua;
+    await this.prisma.analyticsEvent.updateMany({ where: exact, data: { userId } });
+
+    // Pass 2 — /24 subnet match (only if we have a UA)
+    if (!ua) return;
+    const slash24 = subnetSlash24(ip);
+    if (!slash24) return;
+
+    // Confirm this user has history on this /24 in the last 7 days.
+    // Tighter window than the original 30 days — IP-pool churn is too
+    // fast on mobile to trust month-old fingerprints.
+    const historyCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const hasHistory = await this.prisma.analyticsEvent.count({
+      where: {
+        userId,
+        userAgent: ua,
+        createdAt: { gte: historyCutoff },
+        ip: { startsWith: slash24 + '.' },
+      },
+      take: 1,
+    });
+    if (hasHistory === 0) return;
+
+    const candidates = await this.prisma.analyticsEvent.findMany({
+      where: {
+        userId: null,
+        userAgent: ua,
+        createdAt: { gte: recentCutoff },
+        ip: { startsWith: slash24 + '.' },
+      },
+      select: { id: true },
+    });
+    if (candidates.length === 0) return;
+
+    await this.prisma.analyticsEvent.updateMany({
+      where: { id: { in: candidates.map((c) => c.id) } },
+      data: { userId },
+    });
+  }
+}
+
+function subnetSlash24(ip: string): string | null {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  return `${parts[0]}.${parts[1]}.${parts[2]}`;
 }
