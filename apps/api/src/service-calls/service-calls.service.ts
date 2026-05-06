@@ -519,11 +519,14 @@ export class ServiceCallsService implements OnModuleInit, OnModuleDestroy {
         type: 'service_call.incoming',
         callId,
       },
-      // Android: route to the louder 'urgent' channel (declared client-side
-      // with HIGH importance + max vibration). iOS: 'default' since custom
-      // sounds need a separate Apple entitlement we haven't applied for.
-      channelId: 'urgent',
-      sound: 'default',
+      // Android: route to 'urgent_v2' channel — 30-second custom ringtone
+      // bundled at android/app/src/main/res/raw/urgent_call.wav.
+      // iOS: 'urgent_call.caf' bundled in the iOS Resources, falls back to
+      // default if the resource isn't shipped (older builds). Critical
+      // Alerts entitlement (separate Apple application) is NOT used here
+      // — without it, iPhone in Silent Mode won't ring.
+      channelId: 'urgent_v2',
+      sound: 'urgent_call.caf',
     });
   }
 

@@ -69,19 +69,24 @@ async function ensureAndroidChannel(): Promise<void> {
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#F4934A',
   });
-  // 'urgent' channel for on-demand service calls — like an incoming-taxi
-  // ringtone. MAX importance + bypass DND so the master notices even with
-  // the phone face-down. Backend pushes service_call.* events here.
-  await Notifications.setNotificationChannelAsync('urgent', {
+  // 'urgent_v2' channel for on-demand service calls — 30-second custom
+  // ringtone bundled in /android/app/src/main/res/raw/urgent_call.wav.
+  // We use _v2 because Android notification channels are immutable
+  // after creation: existing 'urgent' channel installs would never pick
+  // up the new sound, only a fresh channel id triggers re-creation with
+  // the new attributes. MAX importance + bypassDnd so the ring breaks
+  // through silent mode if the user OS-allowed our channel.
+  await Notifications.setNotificationChannelAsync('urgent_v2', {
     name: 'Срочные вызовы',
-    description: 'Уведомления о срочных вызовах от клиентов',
+    description: 'Уведомления о срочных вызовах от клиентов с длинным звонком',
     importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 500, 250, 500, 250, 500],
+    vibrationPattern: [0, 500, 250, 500, 250, 500, 250, 500, 250, 500],
     lightColor: '#FF3B30',
     bypassDnd: true,
     enableLights: true,
     enableVibrate: true,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    sound: 'urgent_call.wav',
   });
 }
 
