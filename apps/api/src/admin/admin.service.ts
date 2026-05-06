@@ -16,6 +16,7 @@ import { UploadsService } from '../uploads/uploads.service';
 import { WorkshopsService } from '../workshops/workshops.service';
 import { ModerateReviewDto } from '../reviews/dto/moderate-review.dto';
 import { ModerateWorkshopDto } from '../workshops/dto/moderate-workshop.dto';
+import { TesterMonitorService } from '../tester-monitor/tester-monitor.service';
 
 @Injectable()
 export class AdminService {
@@ -26,7 +27,54 @@ export class AdminService {
     private readonly uploadsService: UploadsService,
     private readonly applicationsService: ApplicationsService,
     private readonly reportsService: ReportsService,
+    private readonly testerMonitor: TesterMonitorService,
   ) {}
+
+  async markTester(id: string, isTester: boolean) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { isTester },
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        role: true,
+        isTester: true,
+      },
+    });
+    return updated;
+  }
+
+  /**
+   * Bulk-toggle by phone numbers. Returns matched/unmatched lists so the
+   * caller knows which numbers in their list aren't in our DB yet (likely
+   * not registered in the app yet). Idempotent.
+   */
+  async bulkMarkTesters(phones: string[], isTester: boolean) {
+    const normalized = phones.map((p) => p.trim()).filter(Boolean);
+    const result = await this.prisma.user.updateMany({
+      where: { phone: { in: normalized } },
+      data: { isTester },
+    });
+    const found = await this.prisma.user.findMany({
+      where: { phone: { in: normalized } },
+      select: { phone: true },
+    });
+    const foundPhones = new Set(found.map((u) => u.phone));
+    return {
+      requested: normalized.length,
+      updated: result.count,
+      matchedPhones: [...foundPhones],
+      unmatchedPhones: normalized.filter((p) => !foundPhones.has(p)),
+      isTester,
+    };
+  }
+
+  async runTesterReport() {
+    return this.testerMonitor.runOnce();
+  }
 
   async analytics() {
     const [
@@ -369,7 +417,8 @@ export class AdminService {
     const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
 
     // 1. Pull every non-admin user (clients + masters); 12-tester scale
-    // makes this trivially small.
+    // makes this trivially small. Sort flagged testers first so the admin
+    // sees them at the top of the table without needing a separate filter.
     const users = await this.prisma.user.findMany({
       where: { role: { not: 'ADMIN' } },
       select: {
@@ -379,9 +428,13 @@ export class AdminService {
         role: true,
         isBlocked: true,
         isVerifiedMaster: true,
+        isTester: true,
         createdAt: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { isTester: 'desc' },
+        { createdAt: 'desc' },
+      ],
     });
 
     if (users.length === 0) {
@@ -448,6 +501,7 @@ export class AdminService {
           role: u.role,
           isBlocked: u.isBlocked,
           isVerifiedMaster: u.isVerifiedMaster,
+          isTester: u.isTester,
           createdAt: u.createdAt.toISOString(),
           lastSeenAt: lastSeenByUser.get(u.id)?.toISOString() ?? null,
           totalEvents,

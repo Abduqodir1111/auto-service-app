@@ -26,6 +26,11 @@ const envSchema = z.object({
   SMS_OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   SMS_OTP_RESEND_SECONDS: z.coerce.number().int().positive().default(60),
   SMS_OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  // Optional: Telegram bot for admin alerts (tester activity report,
+  // future PM2-style alerts). Same `@mastertop_alerts_bot` already used
+  // by /opt/stomvp/pm2-watcher.py.
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_ADMIN_CHAT_ID: z.string().min(1).optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

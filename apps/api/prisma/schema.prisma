@@ -86,6 +86,10 @@ model User {
   /// "service call" pushes (Yandex-Taxi-style on-demand requests).
   /// Default is false — master must explicitly enable in settings.
   isMasterOnline       Boolean          @default(false)
+  /// Admin marker — true when this user is part of the Closed Testing
+  /// programme on Google Play and we want to track their daily activity
+  /// so the admin gets a Telegram report of who isn't opening the app.
+  isTester             Boolean          @default(false)
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
   workshops            Workshop[]       @relation("WorkshopOwner")
