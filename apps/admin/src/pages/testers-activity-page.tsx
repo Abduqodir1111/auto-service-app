@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { http } from '../api/http';
 
@@ -13,12 +13,21 @@ type TestersActivityResponse = {
     role: 'CLIENT' | 'MASTER' | 'ADMIN';
     isBlocked: boolean;
     isVerifiedMaster: boolean;
+    isTester?: boolean;
     createdAt: string;
     lastSeenAt: string | null;
     totalEvents: number;
     eventsByDay: Record<string, number>;
     eventsByName: Record<string, number>;
   }>;
+};
+
+type BulkMarkResult = {
+  requested: number;
+  updated: number;
+  matchedPhones: string[];
+  unmatchedPhones: string[];
+  isTester: boolean;
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -68,6 +77,9 @@ function heatStyle(count: number): React.CSSProperties {
 
 export function TestersActivityPage() {
   const [daysBack, setDaysBack] = useState(7);
+  const [showOnlyTesters, setShowOnlyTesters] = useState(false);
+  const [bulkPhones, setBulkPhones] = useState('');
+  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ['admin', 'testers-activity', daysBack],
@@ -81,6 +93,52 @@ export function TestersActivityPage() {
     refetchInterval: 30_000, // Auto-refresh every 30s — page is mostly read-only.
   });
 
+  const markTesterMutation = useMutation({
+    mutationFn: async ({ id, isTester }: { id: string; isTester: boolean }) => {
+      await http.patch(`/admin/users/${id}/tester`, { isTester });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'testers-activity'] }),
+  });
+
+  const bulkMarkMutation = useMutation({
+    mutationFn: async (phones: string[]) => {
+      const { data } = await http.patch<BulkMarkResult>('/admin/testers/bulk-mark', {
+        phones,
+        isTester: true,
+      });
+      return data;
+    },
+    onSuccess: (data) => {
+      const lines = [
+        `Помечено как тестеры: ${data.updated} из ${data.requested}`,
+      ];
+      if (data.unmatchedPhones.length > 0) {
+        lines.push(
+          `\nНе найдены в БД (ещё не зарегистрировались?):\n${data.unmatchedPhones.join('\n')}`,
+        );
+      }
+      alert(lines.join('\n'));
+      setBulkPhones('');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'testers-activity'] });
+    },
+  });
+
+  const runReportMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await http.get<{ sent: boolean; testers: number }>(
+        '/admin/testers/run-report',
+      );
+      return data;
+    },
+    onSuccess: (data) => {
+      alert(
+        data.sent
+          ? `Отчёт отправлен в Telegram (${data.testers} тестеров)`
+          : `Отчёт сформирован, но Telegram-отправка не удалась — проверь TELEGRAM_BOT_TOKEN на сервере (testers: ${data.testers})`,
+      );
+    },
+  });
+
   if (query.isLoading) {
     return <p>Загружаем активность тестеров...</p>;
   }
@@ -89,12 +147,14 @@ export function TestersActivityPage() {
     return <p className="error">Не удалось загрузить данные.</p>;
   }
 
-  const { users, days } = query.data;
+  const { users: allUsers, days } = query.data;
   const visibleDays = days.slice(0, daysBack);
   const todayKey = days[0];
 
+  const users = showOnlyTesters ? allUsers.filter((u) => u.isTester) : allUsers;
   const activeToday = users.filter((u) => (u.eventsByDay[todayKey] ?? 0) > 0).length;
   const inactiveCount = users.filter((u) => !u.lastSeenAt).length;
+  const totalTesters = allUsers.filter((u) => u.isTester).length;
 
   return (
     <section className="stack">
@@ -113,7 +173,7 @@ export function TestersActivityPage() {
         <div className="panel panel--soft">
           <p className="eyebrow">Сегодня заходили</p>
           <strong style={{ fontSize: 28 }}>{activeToday}</strong>
-          <span className="muted">из {users.length} зарегистрированных</span>
+          <span className="muted">из {users.length} в выборке</span>
         </div>
         <div className="panel panel--soft">
           <p className="eyebrow">Никогда не открывали</p>
@@ -121,10 +181,68 @@ export function TestersActivityPage() {
           <span className="muted">регистрация без активности</span>
         </div>
         <div className="panel panel--soft">
-          <p className="eyebrow">Всего пользователей</p>
-          <strong style={{ fontSize: 28 }}>{users.length}</strong>
-          <span className="muted">CLIENT + MASTER</span>
+          <p className="eyebrow">Помечены как тестеры</p>
+          <strong style={{ fontSize: 28 }}>{totalTesters}</strong>
+          <span className="muted">из {allUsers.length} зарегистрированных</span>
         </div>
+      </div>
+
+      <div className="panel">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <strong>Управление тестерами</strong>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className={`button${showOnlyTesters ? '' : ' button--ghost'}`}
+              onClick={() => setShowOnlyTesters((v) => !v)}
+              style={{ fontSize: 13 }}
+            >
+              {showOnlyTesters ? 'Показывать всех' : 'Только тестеры'}
+            </button>
+            <button
+              className="button"
+              onClick={() => runReportMutation.mutate()}
+              disabled={runReportMutation.isPending}
+              style={{ fontSize: 13 }}
+            >
+              {runReportMutation.isPending ? 'Отправляем...' : 'Отправить отчёт в Telegram сейчас'}
+            </button>
+          </div>
+        </div>
+        <p className="muted" style={{ marginTop: 8 }}>
+          Вставь номера тестеров (по одному в строке, формат <code>+998901234567</code>),
+          нажми «Пометить» — пользователи с этими телефонами получат флаг «тестер»
+          и попадут в ежедневный Telegram-отчёт в 09:00 (Ташкент).
+        </p>
+        <textarea
+          value={bulkPhones}
+          onChange={(e) => setBulkPhones(e.target.value)}
+          placeholder="+998901234567&#10;+998991234567&#10;..."
+          rows={5}
+          style={{
+            width: '100%',
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid var(--border)',
+            fontFamily: 'monospace',
+            fontSize: 13,
+            marginTop: 8,
+          }}
+        />
+        <button
+          className="button"
+          style={{ marginTop: 8, fontSize: 13 }}
+          disabled={bulkMarkMutation.isPending || !bulkPhones.trim()}
+          onClick={() => {
+            const phones = bulkPhones
+              .split(/[\n,;]/)
+              .map((p) => p.trim())
+              .filter(Boolean);
+            if (phones.length === 0) return;
+            bulkMarkMutation.mutate(phones);
+          }}
+        >
+          {bulkMarkMutation.isPending ? 'Помечаем...' : 'Пометить как тестеров'}
+        </button>
       </div>
 
       <div className="panel">
@@ -149,6 +267,7 @@ export function TestersActivityPage() {
             <thead>
               <tr>
                 <th style={{ minWidth: 200 }}>Пользователь</th>
+                <th style={{ textAlign: 'center' }}>Тестер</th>
                 <th>Роль</th>
                 <th>Регистрация</th>
                 <th>Был последний раз</th>
@@ -192,6 +311,20 @@ export function TestersActivityPage() {
                           ))}
                         </div>
                       ) : null}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(user.isTester)}
+                        disabled={markTesterMutation.isPending}
+                        onChange={(e) =>
+                          markTesterMutation.mutate({
+                            id: user.id,
+                            isTester: e.target.checked,
+                          })
+                        }
+                        style={{ width: 18, height: 18, cursor: 'pointer' }}
+                      />
                     </td>
                     <td>
                       <span className="badge">{user.role}</span>

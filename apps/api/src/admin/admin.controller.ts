@@ -61,6 +61,30 @@ export class AdminController {
     return this.adminService.verifyMaster(id, dto.isVerifiedMaster, user.sub);
   }
 
+  /**
+   * Mark / unmark a user as a Closed-Testing tester. The daily Telegram
+   * report (and the /testers page) covers exactly this set.
+   */
+  @Patch('users/:id/tester')
+  markTester(
+    @Param('id') id: string,
+    @Body() dto: { isTester: boolean },
+  ) {
+    return this.adminService.markTester(id, dto.isTester);
+  }
+
+  /** Bulk mark via list of phones. Convenient for one-shot setup. */
+  @Patch('testers/bulk-mark')
+  bulkMarkTesters(@Body() dto: { phones: string[]; isTester?: boolean }) {
+    return this.adminService.bulkMarkTesters(dto.phones, dto.isTester ?? true);
+  }
+
+  /** Run the daily report on demand (skips the cron wait). */
+  @Get('testers/run-report')
+  runTesterReport() {
+    return this.adminService.runTesterReport();
+  }
+
   @Get('workshops')
   workshops() {
     return this.adminService.listWorkshops();
