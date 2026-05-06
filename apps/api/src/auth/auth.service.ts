@@ -109,10 +109,11 @@ export class AuthService {
 
   private async buildAuthResponse(userId: string) {
     const user = await this.usersService.getByIdOrThrow(userId);
+    // JWT payload is intentionally minimal — no PII. Phone, name and
+    // any other fields are looked up from the DB by `sub` in JwtStrategy.validate().
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
       role: user.role as UserRole,
-      phone: user.phone,
     });
 
     return {

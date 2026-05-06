@@ -8,7 +8,6 @@ import { PrismaService } from '../database/prisma.service';
 type JwtPayload = {
   sub: string;
   role: UserRole;
-  phone: string;
 };
 
 @Injectable()
