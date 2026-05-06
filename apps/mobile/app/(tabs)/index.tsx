@@ -212,7 +212,7 @@ export default function CatalogScreen() {
         </Animated.View>
       </View>
 
-      {role === UserRole.CLIENT ? <CallStatusBanner /> : null}
+      <CallStatusBanner />
 
       <ScrollView
         ref={filterRailRef}

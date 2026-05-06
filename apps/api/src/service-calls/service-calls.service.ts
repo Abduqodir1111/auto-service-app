@@ -328,12 +328,19 @@ export class ServiceCallsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Client cancels while still searching, or after assignment if master no-show.
+   * Either side can cancel:
+   *   - Client cancels while SEARCHING (no master found yet) or
+   *     ASSIGNED (e.g. mind changed before arrival).
+   *   - Assigned master cancels after accept (e.g. car broke down,
+   *     can't make it). The other party gets a push so the screen
+   *     transitions away cleanly.
    */
   async cancel(id: string, userId: string) {
     const call = await this.prisma.serviceCall.findUnique({ where: { id } });
     if (!call) throw new NotFoundException('Call not found');
-    if (call.clientId !== userId) {
+    const isClient = call.clientId === userId;
+    const isAssignedMaster = call.assignedMasterId === userId;
+    if (!isClient && !isAssignedMaster) {
       throw new ForbiddenException('Not your call');
     }
     if (
@@ -350,11 +357,20 @@ export class ServiceCallsService implements OnModuleInit, OnModuleDestroy {
         completedAt: new Date(),
       },
     });
-    if (call.assignedMasterId) {
+    // Notify the other party. We don't notify the cancelling user — they
+    // already know.
+    if (isClient && call.assignedMasterId) {
       void this.push.sendToUser(call.assignedMasterId, {
         title: '🚫 Клиент отменил вызов',
         body: 'Вызов отменён клиентом.',
         data: { type: 'service_call.cancelled', callId: id },
+      });
+    }
+    if (isAssignedMaster) {
+      void this.push.sendToUser(call.clientId, {
+        title: '🚫 Мастер отменил вызов',
+        body: 'Мастер не сможет приехать. Можете вызвать другого.',
+        data: { type: 'service_call.cancelled_by_master', callId: id },
       });
     }
     return this.serialize(updated);
