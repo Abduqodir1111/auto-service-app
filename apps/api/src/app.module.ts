@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { validateEnv } from './config/env.schema';
 import { PrismaModule } from './database/prisma.module';
@@ -23,6 +24,9 @@ import { TesterMonitorModule } from './tester-monitor/tester-monitor.module';
 
 @Module({
   imports: [
+    // Sentry must be first — its module wires global instrumentation.
+    // No-op if SENTRY_DSN env var isn't set (see instrument.ts).
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnv,
@@ -61,6 +65,13 @@ import { TesterMonitorModule } from './tester-monitor/tester-monitor.module';
     TesterMonitorModule,
   ],
   providers: [
+    // SentryGlobalFilter must run BEFORE any other exception filter so it
+    // captures unhandled errors. NestJS evaluates APP_FILTERs in registration
+    // order — keep this first.
+    {
+      provide: APP_FILTER,
+      useClass: SentryGlobalFilter,
+    },
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

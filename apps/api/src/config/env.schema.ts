@@ -31,6 +31,11 @@ const envSchema = z.object({
   // by /opt/stomvp/pm2-watcher.py.
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
   TELEGRAM_ADMIN_CHAT_ID: z.string().min(1).optional(),
+  // Optional: Sentry error tracking. When unset, Sentry SDK init is a no-op
+  // (see instrument.ts) and nothing is reported. SENTRY_RELEASE is filled by
+  // deploy.sh from current git commit hash so issues are tagged by release.
+  SENTRY_DSN: z.string().url().optional(),
+  SENTRY_RELEASE: z.string().min(1).optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
