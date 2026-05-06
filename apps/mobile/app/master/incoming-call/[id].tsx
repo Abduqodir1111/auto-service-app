@@ -39,6 +39,8 @@ export default function MasterIncomingCallScreen() {
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (status === ServiceCallStatus.SEARCHING) return POLL_INTERVAL_MS;
+      // Keep polling while ASSIGNED so master sees if client cancelled.
+      if (status === ServiceCallStatus.ASSIGNED) return 5_000;
       return false;
     },
   });
@@ -76,6 +78,19 @@ export default function MasterIncomingCallScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['service-call', id] });
       router.back();
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      await api.post(`/service-calls/${id}/cancel`);
+    },
+    onSuccess: () => {
+      Alert.alert('Вызов отменён', 'Клиент получил уведомление.');
+      router.back();
+    },
+    onError: () => {
+      Alert.alert('Ошибка', 'Не удалось отменить вызов.');
     },
   });
 
@@ -166,6 +181,28 @@ export default function MasterIncomingCallScreen() {
         <Pressable onPress={() => completeMutation.mutate()} style={styles.successButton}>
           <Text style={styles.successText}>
             {completeMutation.isPending ? 'Отмечаем...' : 'Готово, вызов завершён'}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() =>
+            Alert.alert(
+              'Отменить вызов?',
+              'Клиент получит уведомление и сможет вызвать другого мастера.',
+              [
+                { text: 'Не отменять', style: 'cancel' },
+                {
+                  text: 'Отменить вызов',
+                  style: 'destructive',
+                  onPress: () => cancelMutation.mutate(),
+                },
+              ],
+            )
+          }
+          disabled={cancelMutation.isPending}
+          style={[styles.dangerButton, cancelMutation.isPending && styles.disabled]}
+        >
+          <Text style={styles.dangerText}>
+            {cancelMutation.isPending ? 'Отменяем...' : 'Отменить вызов'}
           </Text>
         </Pressable>
       </Screen>
@@ -426,6 +463,22 @@ const styles = StyleSheet.create({
     color: '#C55B3C',
     fontWeight: '700',
     fontSize: 15,
+  },
+  dangerButton: {
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: '#FFF4F0',
+    borderWidth: 1,
+    borderColor: '#E7B5A9',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
+  dangerText: {
+    color: '#C55B3C',
+    fontWeight: '700',
+  },
+  disabled: {
+    opacity: 0.5,
   },
   primaryButton: {
     flexDirection: 'row',

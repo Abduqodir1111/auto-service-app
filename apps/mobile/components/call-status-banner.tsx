@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
-import { ServiceCallItem, ServiceCallStatus } from '@stomvp/shared';
+import { ServiceCallItem, ServiceCallStatus, UserRole } from '@stomvp/shared';
 import { api } from '../src/api/client';
 import { colors } from '../src/constants/theme';
+import { useAuthStore } from '../src/store/auth-store';
 
 /**
  * Live "Срочный вызов" card for the client home screen.
@@ -19,6 +20,18 @@ import { colors } from '../src/constants/theme';
  * there's no live call so the card silently falls back to default.
  */
 export function CallStatusBanner() {
+  const role = useAuthStore((state) => state.session?.user.role);
+
+  if (role === UserRole.MASTER) {
+    return <MasterCallBanner />;
+  }
+  if (role === UserRole.CLIENT) {
+    return <ClientCallBanner />;
+  }
+  return null;
+}
+
+function ClientCallBanner() {
   const query = useQuery({
     queryKey: ['service-call-active-client'],
     queryFn: async () => {
@@ -38,6 +51,70 @@ export function CallStatusBanner() {
     return <AssignedBanner call={call} />;
   }
   return <DefaultBanner />;
+}
+
+function MasterCallBanner() {
+  const query = useQuery({
+    queryKey: ['service-call-active-master'],
+    queryFn: async () => {
+      const { data } = await api.get<ServiceCallItem | null>('/service-calls/master/active');
+      return data;
+    },
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+  });
+
+  const call = query.data;
+  // Only render the banner when there's actually an active call to show.
+  // Pending SEARCHING (the master is the live ringing candidate) is
+  // already auto-routed to /master/incoming-call/:id by the global push
+  // handler — no need for a duplicate banner here.
+  if (call?.status === ServiceCallStatus.ASSIGNED) {
+    return <MasterAssignedBanner call={call} />;
+  }
+  if (call?.status === ServiceCallStatus.SEARCHING) {
+    return <MasterRingingBanner call={call} />;
+  }
+  return null;
+}
+
+function MasterAssignedBanner({ call }: { call: ServiceCallItem }) {
+  const clientName = call.client?.fullName ?? 'Клиент';
+  return (
+    <Pressable
+      onPress={() => router.push(`/master/incoming-call/${call.id}`)}
+      style={styles.assigned}
+    >
+      <View style={[styles.iconWrap, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
+        <Ionicons name="briefcase" size={22} color="#FFFFFF" />
+      </View>
+      <View style={styles.copy}>
+        <Text style={styles.title}>Активная заявка</Text>
+        <Text style={styles.subtitle}>
+          Клиент: {clientName} • тапни чтобы вернуться
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+    </Pressable>
+  );
+}
+
+function MasterRingingBanner({ call }: { call: ServiceCallItem }) {
+  return (
+    <Pressable
+      onPress={() => router.push(`/master/incoming-call/${call.id}`)}
+      style={styles.searching}
+    >
+      <View style={[styles.iconWrap, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
+        <Ionicons name="alert" size={22} color="#FFFFFF" />
+      </View>
+      <View style={styles.copy}>
+        <Text style={styles.title}>Срочный вызов!</Text>
+        <Text style={styles.subtitle}>Тапни — есть 30 секунд на свайп</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+    </Pressable>
+  );
 }
 
 function DefaultBanner() {
