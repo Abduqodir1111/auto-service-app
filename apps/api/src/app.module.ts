@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { validateEnv } from './config/env.schema';
 import { PrismaModule } from './database/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -26,20 +27,19 @@ import { TesterMonitorModule } from './tester-monitor/tester-monitor.module';
       isGlobal: true,
       validate: validateEnv,
     }),
-    // Rate-limiter: not applied globally (no APP_GUARD). Specific
-    // endpoints opt in via @UseGuards(ThrottlerGuard) + @Throttle().
-    // Currently used by /auth/register/request-code to prevent SMS flooding
-    // (each request hits paid DevSMS, so an unprotected endpoint = $$$ leak).
+    // Global rate-limit: 150 req/min per IP across all endpoints. Sane
+    // default that legit users (incl. service-call polling at ~30 req/min)
+    // never hit, but a brute-force / scraper / spammer hits immediately.
+    // Stricter caps are applied per-route via @Throttle({ default: {...} }):
+    //   - /auth/register/request-code: 3/min  (DevSMS is paid)
+    //   - /analytics/event:            60/min (in-house event collector)
+    // `app.set('trust proxy', 1)` in main.ts makes req.ip resolve to the
+    // real client behind nginx, not 127.0.0.1.
     ThrottlerModule.forRoot([
       {
-        name: 'sms',
+        name: 'default',
         ttl: 60_000,
-        limit: 3,
-      },
-      {
-        name: 'analytics',
-        ttl: 60_000,
-        limit: 60,
+        limit: 150,
       },
     ]),
     PrismaModule,
@@ -59,6 +59,12 @@ import { TesterMonitorModule } from './tester-monitor/tester-monitor.module';
     AnalyticsModule,
     ServiceCallsModule,
     TesterMonitorModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

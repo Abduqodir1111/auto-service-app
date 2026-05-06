@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser, JwtUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
@@ -14,12 +14,10 @@ import { VerifySignUpCodeDto } from './dto/verify-sign-up-code.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // Rate-limit: 3 SMS requests per minute per IP. Each call hits the
-  // paid DevSMS gateway, so an unprotected endpoint is a financial DoS
-  // vector (~$1 per 25 requests). 4th request from the same IP within
-  // 60s gets HTTP 429.
-  @Throttle({ sms: { limit: 3, ttl: 60_000 } })
-  @UseGuards(ThrottlerGuard)
+  // Override default 150/min → 3/min. Each call hits the paid DevSMS
+  // gateway, so an unprotected endpoint is a financial DoS vector
+  // (~$1 per 25 requests). 4th request from the same IP within 60s gets HTTP 429.
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post('register/request-code')
   requestSignUpCode(@Body() dto: RequestSignUpCodeDto) {
     return this.authService.requestSignUpCode(dto);

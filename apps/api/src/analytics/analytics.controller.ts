@@ -1,6 +1,6 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AnalyticsService } from './analytics.service';
 import { TrackEventDto } from './dto/track-event.dto';
@@ -15,8 +15,7 @@ export class AnalyticsController {
     description:
       'Public, fire-and-forget. Used by mobile + admin to record signup funnel, workshop views, application creation, etc. Returns 204 even on bogus payload — clients should never block UI on this. Rate-limited to 60 events / minute / IP.',
   })
-  @Throttle({ analytics: { limit: 60, ttl: 60_000 } })
-  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @Post('event')
   @HttpCode(HttpStatus.NO_CONTENT)
   async track(@Body() dto: TrackEventDto, @Req() req: Request): Promise<void> {
