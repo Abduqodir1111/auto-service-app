@@ -98,6 +98,7 @@ model User {
   customerApplications Application[]    @relation("CustomerApplications")
   uploadedPhotos       WorkshopPhoto[]  @relation("PhotoUploader")
   reports              Report[]         @relation("ReportReporter")
+  accusedInReports     Report[]         @relation("ReportAccused")
   moderationLogs       ModerationLog[]  @relation("ModerationActor")
   deviceTokens         DeviceToken[]
   analyticsEvents      AnalyticsEvent[]
@@ -253,21 +254,28 @@ model Application {
 }
 
 model Report {
-  id         String           @id @default(uuid()) @db.Uuid
-  reporterId String?          @db.Uuid
-  targetType ReportTargetType
-  targetId   String           @db.Uuid
-  reason     String
-  comment    String?
-  status     ReportStatus     @default(NEW)
-  resolution String?
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
-  reporter   User?            @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  id              String           @id @default(uuid()) @db.Uuid
+  reporterId      String?          @db.Uuid
+  targetType      ReportTargetType
+  targetId        String           @db.Uuid
+  /// User being accused — populated for SERVICE_CALL (= the assigned master)
+  /// and forward-compat for WORKSHOP/PHOTO/REVIEW types where it could be
+  /// denormalized later. Null when the accused user can't be determined or
+  /// has been deleted (onDelete: SetNull).
+  accusedUserId   String?          @db.Uuid
+  reason          String
+  comment         String?
+  status          ReportStatus     @default(NEW)
+  resolution      String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  reporter        User?            @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  accusedUser     User?            @relation("ReportAccused", fields: [accusedUserId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@index([targetType, targetId])
   @@index([reporterId])
+  @@index([accusedUserId])
 }
 
 model ModerationLog {
