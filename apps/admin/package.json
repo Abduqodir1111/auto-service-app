@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@sentry/react": "^10.51.0",
     "@stomvp/shared": "*",
     "@tanstack/react-query": "^5.62.8",
     "axios": "^1.7.9",

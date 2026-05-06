@@ -1,3 +1,7 @@
+// Must be the first import — Sentry's auto-instrumentation needs to patch
+// modules before they're loaded. See instrument.ts for rationale.
+import './instrument';
+
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';

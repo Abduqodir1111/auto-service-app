@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import { router, Stack } from 'expo-router';
 import { AuthUser, ServiceCallItem, ServiceCallStatus, UserRole } from '@stomvp/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -14,6 +15,22 @@ import {
   registerPushTokenWithServer,
 } from '../src/utils/push-notifications';
 
+// Sentry — init at module load, before any UI code runs. EXPO_PUBLIC_* vars
+// are inlined at Metro build time. When DSN missing, init is a no-op so
+// dev builds without `.env` work fine. ⚠️ Effect only takes hold in builds
+// 1.0.4+ — 1.0.3 (Closed Testing AAB / current TestFlight) was already
+// shipped without this SDK.
+const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    environment: __DEV__ ? 'development' : 'production',
+    release: process.env.EXPO_PUBLIC_SENTRY_RELEASE,
+    tracesSampleRate: 0,
+    sendDefaultPii: false,
+  });
+}
+
 const queryClient = new QueryClient();
 
 // Install the foreground notification handler exactly once at module load,
@@ -23,7 +40,7 @@ installNotificationHandler();
 // React to taps on pushes (e.g. master taps incoming-call → navigate).
 installNotificationResponseHandler();
 
-export default function RootLayout() {
+function RootLayout() {
   const hydrated = useAuthStore((state) => state.hydrated);
   const hydrate = useAuthStore((state) => state.hydrate);
   const session = useAuthStore((state) => state.session);
@@ -194,3 +211,8 @@ export default function RootLayout() {
     </QueryClientProvider>
   );
 }
+
+// Sentry.wrap installs an error boundary at the root so JS exceptions in
+// any screen surface as Issues with stack traces + breadcrumbs. No-op when
+// Sentry isn't initialized (DSN missing).
+export default Sentry.wrap(RootLayout);
