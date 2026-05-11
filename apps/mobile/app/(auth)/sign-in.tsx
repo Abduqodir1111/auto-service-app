@@ -58,12 +58,9 @@ export default function SignInScreen() {
 
   return (
     <Screen>
-      {/* Heading — friendly opener instead of a logo, since most users are
-          either returning or registering, and the brand bar in the OS task
-          switcher already shows the icon. */}
-      <View style={styles.headingWrap}>
-        <Text style={styles.heading}>Привет!</Text>
-        <Text style={styles.subheading}>Войдите или создайте аккаунт</Text>
+      <View style={styles.brandWrap}>
+        <Text style={styles.brandName}>MasterTop</Text>
+        <View style={styles.brandUnderline} />
       </View>
 
       {/* Primary CTA at the TOP: most new users tap this first. Green to
@@ -154,21 +151,26 @@ export default function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
-  headingWrap: {
-    marginTop: 28,
-    marginBottom: 20,
-    gap: 4,
+  brandWrap: {
+    marginTop: 36,
+    marginBottom: 28,
+    alignItems: 'center',
+    gap: 10,
   },
-  heading: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.5,
+  brandName: {
+    fontSize: 46,
+    fontWeight: '900',
+    color: colors.accent,
+    letterSpacing: -1.4,
+    textShadowColor: 'rgba(216, 104, 42, 0.25)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 12,
   },
-  subheading: {
-    fontSize: 15,
-    color: colors.muted,
-    fontWeight: '500',
+  brandUnderline: {
+    width: 56,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.accent,
   },
 
   primaryButton: {
