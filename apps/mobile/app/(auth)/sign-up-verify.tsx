@@ -30,6 +30,12 @@ export default function SignUpVerifyScreen() {
     }
   }, [pendingPayload]);
 
+  React.useEffect(() => {
+    if (smsCode.length === 5 && !verifyMutation.isPending && pendingPayload) {
+      verifyMutation.mutate();
+    }
+  }, [smsCode]);
+
   const verifyMutation = useMutation({
     mutationFn: async () => {
       if (!pendingPayload) {
@@ -120,6 +126,10 @@ export default function SignUpVerifyScreen() {
           }}
           keyboardType="number-pad"
           maxLength={5}
+          autoFocus
+          textContentType="oneTimeCode"
+          autoComplete="sms-otp"
+          importantForAutofill="yes"
         />
 
         <Pressable

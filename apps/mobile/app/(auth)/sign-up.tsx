@@ -52,11 +52,12 @@ export default function SignUpScreen() {
       phone: pendingPayload?.phone ?? '',
       password: pendingPayload?.password ?? '',
       confirmPassword: pendingPayload?.password ?? '',
-      role: pendingPayload?.role ?? UserRole.CLIENT,
+      role: pendingPayload?.role ?? (undefined as unknown as UserRole),
     },
   });
 
   const role = watch('role');
+  const roleSelected = role !== undefined;
 
   const requestCodeMutation = useMutation({
     mutationFn: async (value: { phone: string }) => {
@@ -65,8 +66,6 @@ export default function SignUpScreen() {
     },
     onSuccess: () => {
       setRequestError(null);
-      // Fire signup_started only after the SMS gateway confirms — counts
-      // real funnel entries, not idle keystrokes on a half-filled form.
       track('signup_started', { role: watch('role') });
       router.push('/(auth)/sign-up-verify');
     },
@@ -82,27 +81,27 @@ export default function SignUpScreen() {
 
   return (
     <Screen>
-      <View style={styles.heroWrap}>
-        <Text style={styles.heroTitle}>Регистрация</Text>
-        <Text style={styles.heroSubtitle}>
-          Заполните данные — пришлём 5-значный код на ваш номер.
-        </Text>
+      <View style={styles.brandWrap}>
+        <Text style={styles.brandTitle}>Регистрация</Text>
+        <View style={styles.brandUnderline} />
       </View>
 
-      {/* Role chip switcher — visually loud since it changes downstream UX
-          (client vs master). Active chip has tinted background + accent ring. */}
+      <Text style={styles.rolePrompt}>
+        {roleSelected ? 'Вы регистрируетесь как:' : 'Выберите, кто вы:'}
+      </Text>
+
       <View style={styles.roleRow}>
         {[UserRole.CLIENT, UserRole.MASTER].map((value) => {
           const isActive = role === value;
           return (
             <Pressable
               key={value}
-              onPress={() => setValue('role', value)}
+              onPress={() => setValue('role', value, { shouldValidate: true })}
               style={[styles.roleChip, isActive && styles.roleChipActive]}
             >
               <Ionicons
                 name={value === UserRole.CLIENT ? 'person-outline' : 'construct-outline'}
-                size={20}
+                size={22}
                 color={isActive ? colors.accentDark : colors.muted}
               />
               <Text style={[styles.roleText, isActive && styles.roleTextActive]}>
@@ -113,127 +112,142 @@ export default function SignUpScreen() {
         })}
       </View>
 
-      <View style={styles.card}>
-        <Controller
-          control={control}
-          name="fullName"
-          render={({ field }) => (
-            <Field
-              label="Имя"
-              icon="person-outline"
-              placeholder="Ваше имя"
-              value={field.value}
-              onChangeText={field.onChange}
-              error={errors.fullName?.message}
+      {roleSelected ? (
+        <>
+          <View style={styles.card}>
+            <Controller
+              control={control}
+              name="fullName"
+              render={({ field }) => (
+                <Field
+                  label="Имя"
+                  icon="person-outline"
+                  placeholder="Ваше имя"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.fullName?.message}
+                />
+              )}
             />
-          )}
-        />
-        <Controller
-          control={control}
-          name="phone"
-          render={({ field }) => (
-            <Field
-              label="Телефон"
-              icon="call-outline"
-              placeholder="+998 90 123 45 67"
-              value={field.value}
-              onChangeText={field.onChange}
-              keyboardType="phone-pad"
-              error={errors.phone?.message}
+            <Controller
+              control={control}
+              name="phone"
+              render={({ field }) => (
+                <Field
+                  label="Телефон"
+                  icon="call-outline"
+                  placeholder="+998 90 123 45 67"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  keyboardType="phone-pad"
+                  error={errors.phone?.message}
+                />
+              )}
             />
-          )}
-        />
-        <Controller
-          control={control}
-          name="password"
-          render={({ field }) => (
-            <Field
-              label="Пароль"
-              icon="lock-closed-outline"
-              placeholder="Минимум 6 символов"
-              secureTextEntry
-              value={field.value}
-              onChangeText={field.onChange}
-              error={errors.password?.message}
+            <Controller
+              control={control}
+              name="password"
+              render={({ field }) => (
+                <Field
+                  label="Пароль"
+                  icon="lock-closed-outline"
+                  placeholder="Минимум 6 символов"
+                  secureTextEntry
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.password?.message}
+                />
+              )}
             />
-          )}
-        />
-        <Controller
-          control={control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <Field
-              label="Подтвердите пароль"
-              icon="lock-closed-outline"
-              placeholder="Введите пароль ещё раз"
-              secureTextEntry
-              value={field.value}
-              onChangeText={field.onChange}
-              error={errors.confirmPassword?.message}
+            <Controller
+              control={control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <Field
+                  label="Подтвердите пароль"
+                  icon="lock-closed-outline"
+                  placeholder="Введите пароль ещё раз"
+                  secureTextEntry
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.confirmPassword?.message}
+                />
+              )}
             />
-          )}
-        />
 
-        {requestError ? <Text style={styles.error}>{requestError}</Text> : null}
+            {requestError ? <Text style={styles.error}>{requestError}</Text> : null}
 
-        <Pressable
-          onPress={handleSubmit((values) => {
-            setPendingPayload({
-              fullName: values.fullName,
-              phone: values.phone,
-              password: values.password,
-              role: values.role,
-            });
-            requestCodeMutation.mutate({ phone: values.phone });
-          })}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.buttonPressed,
-            requestCodeMutation.isPending && styles.buttonDisabled,
-          ]}
-          disabled={requestCodeMutation.isPending}
-        >
-          <Ionicons name="send" size={18} color="#FFFFFF" style={styles.btnIcon} />
-          <Text style={styles.primaryButtonText}>
-            {requestCodeMutation.isPending ? 'Отправляем SMS...' : 'Зарегистрироваться'}
-          </Text>
-        </Pressable>
-      </View>
+            <Pressable
+              onPress={handleSubmit((values) => {
+                setPendingPayload({
+                  fullName: values.fullName,
+                  phone: values.phone,
+                  password: values.password,
+                  role: values.role,
+                });
+                requestCodeMutation.mutate({ phone: values.phone });
+              })}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.buttonPressed,
+                requestCodeMutation.isPending && styles.buttonDisabled,
+              ]}
+              disabled={requestCodeMutation.isPending}
+            >
+              <Ionicons name="send" size={18} color="#FFFFFF" style={styles.btnIcon} />
+              <Text style={styles.primaryButtonText}>
+                {requestCodeMutation.isPending ? 'Отправляем SMS...' : 'Зарегистрироваться'}
+              </Text>
+            </Pressable>
+          </View>
 
-      {/* Backlink to login — for users who landed here but already have
-          an account. Quiet, doesn't compete with the primary CTA. */}
-      <Pressable onPress={() => router.back()} style={styles.backlinkWrap}>
-        <Text style={styles.backlinkText}>
-          Уже есть аккаунт?{' '}
-          <Text style={styles.backlinkAccent}>Войти</Text>
-        </Text>
-      </Pressable>
+          <Pressable onPress={() => router.back()} style={styles.backlinkWrap}>
+            <Text style={styles.backlinkText}>
+              Уже есть аккаунт?{' '}
+              <Text style={styles.backlinkAccent}>Войти</Text>
+            </Text>
+          </Pressable>
+        </>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  heroWrap: {
-    marginTop: 20,
-    marginBottom: 18,
-    gap: 6,
+  brandWrap: {
+    marginTop: 28,
+    marginBottom: 24,
+    alignItems: 'center',
+    gap: 8,
   },
-  heroTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.5,
+  brandTitle: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: colors.accent,
+    letterSpacing: -1,
+    textShadowColor: 'rgba(216, 104, 42, 0.22)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 10,
   },
-  heroSubtitle: {
-    color: colors.muted,
+  brandUnderline: {
+    width: 48,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.accent,
+  },
+
+  rolePrompt: {
     fontSize: 14,
-    lineHeight: 20,
+    color: colors.muted,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
   },
 
   roleRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 8,
   },
   roleChip: {
     flex: 1,
@@ -243,7 +257,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: 18,
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 10,
     backgroundColor: colors.card,
   },
@@ -268,6 +282,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 18,
     gap: 14,
+    marginTop: 8,
   },
 
   primaryButton: {
