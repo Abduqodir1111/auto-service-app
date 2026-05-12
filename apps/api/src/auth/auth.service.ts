@@ -1,14 +1,19 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  HttpException,
+  HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserRole as DbUserRole } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@stomvp/shared';
 import { compare, hash } from 'bcrypt';
+import Redis from 'ioredis';
 import { PrismaService } from '../database/prisma.service';
+import { REDIS } from '../redis/redis.constants';
 import { UsersService } from '../users/users.service';
 import { SignInDto } from './dto/sign-in.dto';
 import { SignUpDto } from './dto/sign-up.dto';
@@ -25,6 +30,17 @@ import { SmsAuthService } from './sms-auth.service';
 const DUMMY_PASSWORD_HASH =
   '$2b$10$TUyKoA58DBCmovoscHH4IuCy4Dpqp1VgnT1thetnls.taaEl8O2jG';
 
+// Brute-force lockout: track failed login attempts in Redis keyed by phone.
+// After MAX_ATTEMPTS bad passwords within ATTEMPT_WINDOW_SECONDS, lock the
+// phone for LOCKOUT_SECONDS. fail2ban already blocks IPs at the nginx layer
+// for excessive 401s; this layer blocks at the *account* level, so a
+// distributed attack (botnet, rotated IPs) can't pin a known phone.
+const LOGIN_FAIL_KEY = (phone: string) => `auth:login:fail:${phone}`;
+const LOGIN_LOCK_KEY = (phone: string) => `auth:login:lock:${phone}`;
+const MAX_ATTEMPTS = 5;
+const ATTEMPT_WINDOW_SECONDS = 15 * 60; // 15 min sliding counter
+const LOCKOUT_SECONDS = 15 * 60; // 15 min lock after the 5th fail
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -32,6 +48,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly usersService: UsersService,
     private readonly smsAuthService: SmsAuthService,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
   async requestSignUpCode(dto: RequestSignUpCodeDto) {
@@ -80,6 +97,21 @@ export class AuthService {
 
   async login(dto: SignInDto) {
     const normalizedPhone = formatUzPhoneForStorage(dto.phone);
+
+    // Lockout check happens first — even before DB lookup — so a locked
+    // phone gets a uniform fast reject regardless of whether the password
+    // is right or wrong.
+    const lockTtl = await this.redis.ttl(LOGIN_LOCK_KEY(normalizedPhone));
+    if (lockTtl > 0) {
+      throw new HttpException(
+        {
+          message: `Слишком много неудачных попыток. Повторите через ${Math.ceil(lockTtl / 60)} мин.`,
+          retryAfterSeconds: lockTtl,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { phone: normalizedPhone },
     });
@@ -92,6 +124,7 @@ export class AuthService {
     );
 
     if (!user || !passwordMatches) {
+      await this.recordLoginFailure(normalizedPhone);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -99,7 +132,23 @@ export class AuthService {
       throw new UnauthorizedException('Account is blocked');
     }
 
+    // Success — wipe the failure counter so the next bad login starts
+    // fresh, not from a near-locked state.
+    await this.redis.del(LOGIN_FAIL_KEY(normalizedPhone));
     return this.buildAuthResponse(user.id);
+  }
+
+  private async recordLoginFailure(phone: string) {
+    const key = LOGIN_FAIL_KEY(phone);
+    const count = await this.redis.incr(key);
+    if (count === 1) {
+      // First fail in the window — start the expiry.
+      await this.redis.expire(key, ATTEMPT_WINDOW_SECONDS);
+    }
+    if (count >= MAX_ATTEMPTS) {
+      await this.redis.set(LOGIN_LOCK_KEY(phone), '1', 'EX', LOCKOUT_SECONDS);
+      await this.redis.del(key);
+    }
   }
 
   async me(userId: string) {
