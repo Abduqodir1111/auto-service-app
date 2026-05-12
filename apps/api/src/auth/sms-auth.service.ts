@@ -192,20 +192,23 @@ export class SmsAuthService {
       throw new ServiceUnavailableException('SMS provider is not configured');
     }
 
-    const response = await fetch(`${this.providerBaseUrl}/send_sms.php`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.providerToken}`,
-        'Content-Type': 'application/json',
+    const response = await this.fetchDevSmsWithRetry(
+      `${this.providerBaseUrl}/send_sms.php`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.providerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone,
+          type: 'universal_otp',
+          template_type: 3,
+          service_name: this.serviceName,
+          otp_code: code,
+        }),
       },
-      body: JSON.stringify({
-        phone,
-        type: 'universal_otp',
-        template_type: 3,
-        service_name: this.serviceName,
-        otp_code: code,
-      }),
-    });
+    );
 
     let payload: { success?: boolean; error?: string; message?: string };
 
@@ -224,6 +227,50 @@ export class SmsAuthService {
         payload.error || payload.message || 'Не удалось отправить SMS-код',
       );
     }
+  }
+
+  /**
+   * fetch() with a hard 5-second timeout and up to 2 retries on transient
+   * failures (network errors or 5xx). Retries skip 4xx because those are
+   * caller errors (bad phone, bad token, etc.) — retrying won't help.
+   *
+   * Without this, a slow or wedged DevSMS endpoint would hang the
+   * request thread indefinitely and the user would see no SMS without
+   * any error.
+   */
+  private async fetchDevSmsWithRetry(url: string, init: RequestInit) {
+    const maxAttempts = 3;
+    const timeoutMs = 5000;
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const response = await fetch(url, { ...init, signal: controller.signal });
+
+        // 5xx → retry; 4xx → give up immediately (caller fixable).
+        if (response.status >= 500 && attempt < maxAttempts) {
+          lastError = new Error(`DevSMS responded ${response.status}`);
+        } else {
+          return response;
+        }
+      } catch (err) {
+        lastError = err;
+        // Abort or network error → retry if attempts remain.
+        if (attempt >= maxAttempts) break;
+      } finally {
+        clearTimeout(timer);
+      }
+
+      // Exponential backoff: 300ms, 900ms.
+      await new Promise((resolve) => setTimeout(resolve, 300 * 3 ** (attempt - 1)));
+    }
+
+    const message =
+      lastError instanceof Error ? lastError.message : 'unknown error';
+    throw new BadGatewayException(`SMS provider unreachable: ${message}`);
   }
 
   private getSignUpCodeKey(phone: string) {
