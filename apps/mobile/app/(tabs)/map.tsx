@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
@@ -22,13 +21,6 @@ import { colors } from '../../src/constants/theme';
 import { getDeviceCoordinates } from '../../src/utils/device-location';
 import { createWorkshopsLeafletHtml } from '../../src/utils/leaflet-html';
 import { getDefaultMapCoordinates } from '../../src/utils/maps';
-
-const filterPalettes = [
-  { background: '#FFF1E7', badge: '#FFE3D0', border: '#F1D1BC', icon: colors.accentDark },
-  { background: '#EAF4F1', badge: '#D7ECE5', border: '#C8E0D8', icon: colors.success },
-  { background: '#FFF7DD', badge: '#FFECB2', border: '#EEDDAB', icon: colors.warning },
-  { background: '#EEF2FF', badge: '#DCE4FF', border: '#CFD9FA', icon: '#4862C5' },
-];
 
 type MapMessage =
   | {
@@ -48,16 +40,12 @@ type Coordinates = {
 };
 
 export default function MapTabScreen() {
-  const [search, setSearch] = useState('');
-  const [city, setCity] = useState('');
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null);
   const [deviceLocation, setDeviceLocation] = useState<Coordinates | null>(null);
   const [mapCenter, setMapCenter] = useState<Coordinates | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const filterRailRef = useRef<ScrollView>(null);
-  const deferredSearch = useDeferredValue(search);
-  const deferredCity = useDeferredValue(city);
   const fallbackCenter = useMemo(() => getDefaultMapCoordinates(), []);
 
   const categoriesQuery = useQuery({
@@ -69,7 +57,7 @@ export default function MapTabScreen() {
   });
 
   const workshopsQuery = useQuery({
-    queryKey: ['workshops-map', deferredSearch, deferredCity, categoryId],
+    queryKey: ['workshops-map', categoryId],
     queryFn: async () => {
       const allItems: WorkshopSummary[] = [];
       let page = 1;
@@ -80,8 +68,6 @@ export default function MapTabScreen() {
           params: {
             page,
             pageSize: 50,
-            search: deferredSearch || undefined,
-            city: deferredCity || undefined,
             categoryId,
           },
         });
@@ -115,10 +101,10 @@ export default function MapTabScreen() {
   }, [mapWorkshops, selectedWorkshopId]);
 
   useEffect(() => {
-    if (deferredSearch || deferredCity || categoryId) {
+    if (categoryId) {
       setMapCenter(null);
     }
-  }, [categoryId, deferredCity, deferredSearch]);
+  }, [categoryId]);
 
   useEffect(() => {
     if (categoryId || categories.length === 0) {
@@ -204,126 +190,47 @@ export default function MapTabScreen() {
     [deviceLocation, mapCenter, mapWorkshops],
   );
 
-  const refresh = () => {
-    void Promise.all([workshopsQuery.refetch(), categoriesQuery.refetch()]);
-  };
-
   return (
-    <Screen edges={['left', 'right', 'bottom']} scroll={false} style={styles.screenContent}>
-      <View style={styles.header}>
-        <View style={styles.headerCopy}>
-          <Text style={styles.title}>Карта объявлений</Text>
-          <Text style={styles.subtitle}>
-            Ищите мастеров по карте, городу и нужной услуге. Можно сразу перейти в карточку.
-          </Text>
-        </View>
-
-        <Pressable onPress={refresh} style={styles.refreshButton}>
-          <Ionicons name="refresh" size={18} color={colors.accentDark} />
-        </Pressable>
-      </View>
-
-      <View style={styles.inputsRow}>
-        <View style={styles.inputShell}>
-          <Ionicons name="search-outline" size={18} color={colors.muted} />
-          <TextInput
-            placeholder="Что ищем"
-            placeholderTextColor={colors.muted}
-            value={search}
-            onChangeText={setSearch}
-            style={styles.input}
-          />
-        </View>
-
-        <View style={styles.inputShell}>
-          <Ionicons name="business-outline" size={18} color={colors.muted} />
-          <TextInput
-            placeholder="Город"
-            placeholderTextColor={colors.muted}
-            value={city}
-            onChangeText={setCity}
-            style={styles.input}
-          />
-        </View>
-      </View>
-
+    <Screen scroll={false} style={styles.screenContent}>
       <ScrollView
         ref={filterRailRef}
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterRailWrap}
         contentContainerStyle={styles.filterRail}
       >
         <Pressable
           onPress={() => setCategoryId(undefined)}
-          style={[
-            styles.filterCard,
-            !categoryId ? styles.filterCardSelectedFilled : styles.filterCardAll,
-            !categoryId && styles.filterCardSelected,
-            !categoryId && styles.filterCardActive,
-          ]}
+          style={[styles.chip, !categoryId && styles.chipActive]}
         >
-          <View
-            style={[
-              styles.filterIconWrap,
-              !categoryId ? styles.filterIconWrapActive : styles.filterIconWrapWarm,
-            ]}
-          >
-            <Ionicons
-              name="grid-outline"
-              size={18}
-              color={!categoryId ? '#FFFFFF' : colors.accentDark}
-            />
-          </View>
-          <Text style={[styles.filterTitle, !categoryId && styles.filterTitleActive]}>Все</Text>
+          <Ionicons
+            name="grid-outline"
+            size={14}
+            color={!categoryId ? '#FFFFFF' : colors.accentDark}
+          />
+          <Text style={[styles.chipText, !categoryId && styles.chipTextActive]}>Все</Text>
         </Pressable>
 
-        {categories.map((category, index) => {
-          const palette = filterPalettes[index % filterPalettes.length];
+        {categories.map((category) => {
           const active = categoryId === category.id;
-
           return (
             <Pressable
               key={category.id}
               onPress={() => setCategoryId(active ? undefined : category.id)}
-              style={[
-                styles.filterCard,
-                {
-                  backgroundColor: active ? colors.accent : palette.background,
-                  borderColor: active ? colors.accent : palette.border,
-                },
-                active && styles.filterCardActive,
-              ]}
+              style={[styles.chip, active && styles.chipActive]}
             >
-              <View
-                style={[
-                  styles.filterIconWrap,
-                  {
-                    backgroundColor: active ? 'rgba(255, 255, 255, 0.18)' : palette.badge,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={getCategoryIcon(category.slug)}
-                  size={18}
-                  color={active ? '#FFFFFF' : palette.icon}
-                />
-              </View>
-              <Text
-                numberOfLines={2}
-                style={[styles.filterTitle, active && styles.filterTitleActive]}
-              >
+              <Ionicons
+                name={getCategoryIcon(category.slug)}
+                size={14}
+                color={active ? '#FFFFFF' : colors.accentDark}
+              />
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>
                 {category.name}
               </Text>
             </Pressable>
           );
         })}
       </ScrollView>
-
-      <View style={styles.metaRow}>
-        <Text style={styles.metaText}>
-          На карте: {mapWorkshops.length} точек из {workshops.length} опубликованных объявлений
-        </Text>
-      </View>
 
       <View style={styles.mapCard}>
         <WebView
@@ -413,123 +320,46 @@ const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
     paddingTop: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-    gap: 12,
-  },
-  header: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-  },
-  headerCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  subtitle: {
-    color: colors.muted,
-    lineHeight: 20,
-  },
-  refreshButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFF0E5',
-    borderWidth: 1,
-    borderColor: '#F1D1BC',
-  },
-  inputsRow: {
-    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingBottom: 12,
     gap: 10,
   },
-  inputShell: {
-    flex: 1,
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  input: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 15,
+  filterRailWrap: {
+    flexGrow: 0,
+    flexShrink: 0,
   },
   filterRail: {
-    gap: 10,
-    paddingRight: 16,
+    gap: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    alignItems: 'center',
   },
-  filterCard: {
-    width: 104,
-    minHeight: 74,
-    padding: 12,
-    borderRadius: 20,
-    justifyContent: 'space-between',
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  filterCardAll: {
-    backgroundColor: '#FFF8F2',
-    borderColor: '#F1D1BC',
-  },
-  filterCardSelectedFilled: {
+  chipActive: {
     backgroundColor: colors.accent,
     borderColor: colors.accent,
   },
-  filterCardSelected: {
-    shadowColor: '#151515',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 18,
-    elevation: 2,
-  },
-  filterCardActive: {
-    transform: [{ translateY: -1 }],
-  },
-  filterIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterIconWrapWarm: {
-    backgroundColor: '#FFE3D0',
-  },
-  filterIconWrapActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-  },
-  filterTitle: {
+  chipText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
     color: colors.text,
   },
-  filterTitleActive: {
+  chipTextActive: {
     color: '#FFFFFF',
-  },
-  metaRow: {
-    paddingHorizontal: 4,
-  },
-  metaText: {
-    color: colors.muted,
-    fontSize: 13,
   },
   mapCard: {
     flex: 1,
-    minHeight: 420,
-    borderRadius: 28,
+    borderRadius: 24,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,

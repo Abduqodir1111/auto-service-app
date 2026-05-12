@@ -50,7 +50,9 @@ function ClientCallBanner() {
   if (call?.status === ServiceCallStatus.ASSIGNED) {
     return <AssignedBanner call={call} />;
   }
-  return <DefaultBanner />;
+  // Default "запросить мастера" CTA moved to the floating FAB
+  // (components/call-master-fab.tsx) to free up screen real estate.
+  return null;
 }
 
 function MasterCallBanner() {
@@ -111,21 +113,6 @@ function MasterRingingBanner({ call }: { call: ServiceCallItem }) {
       <View style={styles.copy}>
         <Text style={styles.title}>Срочный вызов!</Text>
         <Text style={styles.subtitle}>Тапни — есть 30 секунд на свайп</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
-    </Pressable>
-  );
-}
-
-function DefaultBanner() {
-  return (
-    <Pressable onPress={() => router.push('/call')} style={styles.default}>
-      <View style={styles.iconWrap}>
-        <Ionicons name="alert" size={22} color="#FFFFFF" />
-      </View>
-      <View style={styles.copy}>
-        <Text style={styles.title}>Срочный вызов мастера</Text>
-        <Text style={styles.subtitle}>Ближайший доступный мастер позвонит вам</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
     </Pressable>

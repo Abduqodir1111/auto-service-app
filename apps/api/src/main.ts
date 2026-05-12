@@ -49,6 +49,12 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);
 
+  // Listen for SIGTERM/SIGINT from PM2 reload. With this on, NestJS will
+  // wait for in-flight HTTP requests, then call OnModuleDestroy hooks
+  // (PrismaService.$disconnect, RedisService.quit, etc.) before exiting.
+  // Without it, PM2 reload abruptly kills the process mid-request.
+  app.enableShutdownHooks();
+
   await app.listen(process.env.PORT || 3000);
 }
 

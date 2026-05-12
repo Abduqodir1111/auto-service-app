@@ -4,9 +4,28 @@ import { colors } from '../src/constants/theme';
 
 type AppLogoProps = {
   compact?: boolean;
+  /** Show only the badge icon, centered. Used on the auth screen where the
+   *  badge plays the role of the app icon and the text moves to the bottom. */
+  iconOnly?: boolean;
 };
 
-export function AppLogo({ compact = false }: AppLogoProps) {
+export function AppLogo({ compact = false, iconOnly = false }: AppLogoProps) {
+  if (iconOnly) {
+    return (
+      <View style={styles.iconOnlyWrap}>
+        <View style={styles.badgeLarge}>
+          <View style={styles.badgeGlowLarge} />
+          <View style={styles.badgeCoreLarge}>
+            <Ionicons name="car-sport" size={44} color="#FFFFFF" />
+            <View style={styles.pinBubbleLarge}>
+              <Ionicons name="location" size={20} color="#FFFFFF" />
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.wrap, compact && styles.wrapCompact]}>
       <View style={[styles.badge, compact && styles.badgeCompact]}>
@@ -100,5 +119,48 @@ const styles = StyleSheet.create({
   },
   taglineCompact: {
     fontSize: 12,
+  },
+  // ── icon-only mode (auth screen hero) ──────────────────────────────
+  iconOnlyWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeLarge: {
+    width: 112,
+    height: 112,
+    borderRadius: 32,
+    backgroundColor: '#FFF1E7',
+    borderWidth: 1,
+    borderColor: '#F1D1BC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeGlowLarge: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
+    backgroundColor: 'rgba(216, 104, 42, 0.08)',
+  },
+  badgeCoreLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinBubbleLarge: {
+    position: 'absolute',
+    right: -8,
+    bottom: -8,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.success,
+    borderWidth: 3,
+    borderColor: '#FFF8F2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

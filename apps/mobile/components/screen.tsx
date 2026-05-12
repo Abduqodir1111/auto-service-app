@@ -1,6 +1,8 @@
 import { PropsWithChildren } from 'react';
 import { Edge, SafeAreaView } from 'react-native-safe-area-context';
 import {
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleProp,
@@ -23,6 +25,8 @@ export function Screen({ children, scroll = true, style, edges, refreshing, onRe
     <ScrollView
       contentContainerStyle={[styles.content, style]}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      automaticallyAdjustKeyboardInsets
       showsVerticalScrollIndicator={false}
       alwaysBounceVertical
       refreshControl={
@@ -44,7 +48,13 @@ export function Screen({ children, scroll = true, style, edges, refreshing, onRe
 
   return (
     <SafeAreaView edges={edges ?? ['top', 'right', 'bottom', 'left']} style={styles.container}>
-      {content}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+      >
+        {content}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

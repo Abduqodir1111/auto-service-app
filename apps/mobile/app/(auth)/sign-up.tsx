@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 import { router } from 'expo-router';
@@ -51,21 +52,20 @@ export default function SignUpScreen() {
       phone: pendingPayload?.phone ?? '',
       password: pendingPayload?.password ?? '',
       confirmPassword: pendingPayload?.password ?? '',
-      role: pendingPayload?.role ?? UserRole.CLIENT,
+      role: pendingPayload?.role ?? (undefined as unknown as UserRole),
     },
   });
 
   const role = watch('role');
+  const roleSelected = role !== undefined;
 
   const requestCodeMutation = useMutation({
     mutationFn: async (value: { phone: string }) => {
       const { data } = await api.post<RequestCodeResponse>('/auth/register/request-code', value);
       return data;
     },
-    onSuccess: (_, variables, context) => {
+    onSuccess: () => {
       setRequestError(null);
-      // Fire signup_started only after the SMS gateway confirms — counts
-      // real funnel entries, not idle keystrokes on a half-filled form.
       track('signup_started', { role: watch('role') });
       router.push('/(auth)/sign-up-verify');
     },
@@ -74,7 +74,6 @@ export default function SignUpScreen() {
         setRequestError('Не удалось отправить SMS-код');
         return;
       }
-
       const message = error.response?.data?.message;
       setRequestError(typeof message === 'string' ? message : 'Не удалось отправить SMS-код');
     },
@@ -82,129 +81,184 @@ export default function SignUpScreen() {
 
   return (
     <Screen>
-      <View style={{ gap: 8 }}>
-        <Text style={styles.title}>Создать аккаунт</Text>
-        <Text style={styles.subtitle}>
-          Заполните данные, затем мы отправим 5-значный код на ваш номер и
-          откроем следующий шаг подтверждения.
-        </Text>
+      <View style={styles.brandWrap}>
+        <Text style={styles.brandTitle}>Регистрация</Text>
+        <View style={styles.brandUnderline} />
       </View>
+
+      <Text style={styles.rolePrompt}>
+        {roleSelected ? 'Вы регистрируетесь как:' : 'Выберите, кто вы:'}
+      </Text>
 
       <View style={styles.roleRow}>
-        {[UserRole.CLIENT, UserRole.MASTER].map((value) => (
-          <Pressable
-            key={value}
-            onPress={() => setValue('role', value)}
-            style={[styles.roleChip, role === value && styles.roleChipActive]}
-          >
-            <Text style={[styles.roleText, role === value && styles.roleTextActive]}>
-              {value === UserRole.CLIENT ? 'Я клиент' : 'Я мастер / СТО'}
+        {[UserRole.CLIENT, UserRole.MASTER].map((value) => {
+          const isActive = role === value;
+          return (
+            <Pressable
+              key={value}
+              onPress={() => setValue('role', value, { shouldValidate: true })}
+              style={[styles.roleChip, isActive && styles.roleChipActive]}
+            >
+              <Ionicons
+                name={value === UserRole.CLIENT ? 'person-outline' : 'construct-outline'}
+                size={22}
+                color={isActive ? colors.accentDark : colors.muted}
+              />
+              <Text style={[styles.roleText, isActive && styles.roleTextActive]}>
+                {value === UserRole.CLIENT ? 'Я клиент' : 'Я мастер / СТО'}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {roleSelected ? (
+        <>
+          <View style={styles.card}>
+            <Controller
+              control={control}
+              name="fullName"
+              render={({ field }) => (
+                <Field
+                  label="Имя"
+                  icon="person-outline"
+                  placeholder="Ваше имя"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.fullName?.message}
+                />
+              )}
+            />
+            <Controller
+              control={control}
+              name="phone"
+              render={({ field }) => (
+                <Field
+                  label="Телефон"
+                  icon="call-outline"
+                  placeholder="+998 90 123 45 67"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  keyboardType="phone-pad"
+                  error={errors.phone?.message}
+                />
+              )}
+            />
+            <Controller
+              control={control}
+              name="password"
+              render={({ field }) => (
+                <Field
+                  label="Пароль"
+                  icon="lock-closed-outline"
+                  placeholder="Минимум 6 символов"
+                  secureTextEntry
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.password?.message}
+                />
+              )}
+            />
+            <Controller
+              control={control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <Field
+                  label="Подтвердите пароль"
+                  icon="lock-closed-outline"
+                  placeholder="Введите пароль ещё раз"
+                  secureTextEntry
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.confirmPassword?.message}
+                />
+              )}
+            />
+
+            {requestError ? <Text style={styles.error}>{requestError}</Text> : null}
+
+            <Pressable
+              onPress={handleSubmit((values) => {
+                setPendingPayload({
+                  fullName: values.fullName,
+                  phone: values.phone,
+                  password: values.password,
+                  role: values.role,
+                });
+                requestCodeMutation.mutate({ phone: values.phone });
+              })}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.buttonPressed,
+                requestCodeMutation.isPending && styles.buttonDisabled,
+              ]}
+              disabled={requestCodeMutation.isPending}
+            >
+              <Ionicons name="send" size={18} color="#FFFFFF" style={styles.btnIcon} />
+              <Text style={styles.primaryButtonText}>
+                {requestCodeMutation.isPending ? 'Отправляем SMS...' : 'Зарегистрироваться'}
+              </Text>
+            </Pressable>
+          </View>
+
+          <Pressable onPress={() => router.back()} style={styles.backlinkWrap}>
+            <Text style={styles.backlinkText}>
+              Уже есть аккаунт?{' '}
+              <Text style={styles.backlinkAccent}>Войти</Text>
             </Text>
           </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.card}>
-        <Controller
-          control={control}
-          name="fullName"
-          render={({ field }) => (
-            <Field
-              label="Имя"
-              value={field.value}
-              onChangeText={field.onChange}
-              error={errors.fullName?.message}
-            />
-          )}
-        />
-        <Controller
-          control={control}
-          name="phone"
-          render={({ field }) => (
-            <Field
-              label="Телефон"
-              value={field.value}
-              onChangeText={field.onChange}
-              keyboardType="phone-pad"
-              error={errors.phone?.message}
-            />
-          )}
-        />
-        <Controller
-          control={control}
-          name="password"
-          render={({ field }) => (
-            <Field
-              label="Пароль"
-              secureTextEntry
-              value={field.value}
-              onChangeText={field.onChange}
-              error={errors.password?.message}
-            />
-          )}
-        />
-        <Controller
-          control={control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <Field
-              label="Подтвердите пароль"
-              secureTextEntry
-              value={field.value}
-              onChangeText={field.onChange}
-              error={errors.confirmPassword?.message}
-            />
-          )}
-        />
-
-        <Pressable
-          onPress={handleSubmit((values) => {
-            setPendingPayload({
-              fullName: values.fullName,
-              phone: values.phone,
-              password: values.password,
-              role: values.role,
-            });
-
-            requestCodeMutation.mutate({
-              phone: values.phone,
-            });
-          })}
-          style={[styles.button, requestCodeMutation.isPending && styles.buttonDisabled]}
-          disabled={requestCodeMutation.isPending}
-        >
-          <Text style={styles.buttonText}>
-            {requestCodeMutation.isPending ? 'Отправляем SMS...' : 'Зарегистрироваться'}
-          </Text>
-        </Pressable>
-
-        {requestError ? <Text style={styles.error}>{requestError}</Text> : null}
-      </View>
+        </>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: colors.text,
-    marginTop: 16,
+  brandWrap: {
+    marginTop: 28,
+    marginBottom: 24,
+    alignItems: 'center',
+    gap: 8,
   },
-  subtitle: {
+  brandTitle: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: colors.accent,
+    letterSpacing: -1,
+    textShadowColor: 'rgba(216, 104, 42, 0.22)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 10,
+  },
+  brandUnderline: {
+    width: 48,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.accent,
+  },
+
+  rolePrompt: {
+    fontSize: 14,
     color: colors.muted,
-    lineHeight: 20,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
   },
+
   roleRow: {
     flexDirection: 'row',
     gap: 10,
+    marginBottom: 8,
   },
   roleChip: {
     flex: 1,
-    borderWidth: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: 18,
-    padding: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
     backgroundColor: colors.card,
   },
   roleChipActive: {
@@ -215,10 +269,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.text,
     fontWeight: '600',
+    fontSize: 14,
   },
   roleTextActive: {
     color: colors.accentDark,
   },
+
   card: {
     backgroundColor: colors.card,
     borderRadius: 24,
@@ -226,23 +282,51 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 18,
     gap: 14,
-  },
-  button: {
     marginTop: 8,
-    borderRadius: 18,
+  },
+
+  primaryButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 6,
+    borderRadius: 20,
     backgroundColor: colors.success,
     paddingVertical: 16,
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.3,
+  },
+  btnIcon: {
+    marginRight: 8,
+  },
+  buttonPressed: { opacity: 0.88 },
+  buttonDisabled: { opacity: 0.5 },
+
+  backlinkWrap: {
+    marginTop: 20,
     alignItems: 'center',
   },
-  buttonText: {
-    color: 'white',
+  backlinkText: {
+    color: colors.muted,
+    fontSize: 14,
+  },
+  backlinkAccent: {
+    color: colors.accentDark,
     fontWeight: '700',
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
+
   error: {
     color: colors.danger,
     fontSize: 13,
+    marginLeft: 4,
   },
 });
