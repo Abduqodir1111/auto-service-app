@@ -8,6 +8,7 @@ import {
   Easing,
   Keyboard,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,8 +18,10 @@ import {
 } from 'react-native';
 import { ServiceCategory, UserRole, WorkshopSummary } from '@stomvp/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CallMasterFab } from '../../components/call-master-fab';
 import { CallStatusBanner } from '../../components/call-status-banner';
 import { Screen } from '../../components/screen';
+import { WorkshopCardSkeleton } from '../../components/skeleton';
 import { WorkshopCard } from '../../components/workshop-card';
 import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
@@ -178,48 +181,47 @@ export default function CatalogScreen() {
 
   return (
     <Screen
+      scroll={false}
       edges={['left', 'right', 'bottom']}
-      refreshing={workshopsQuery.isRefetching || categoriesQuery.isRefetching}
-      onRefresh={() => {
-        void Promise.all([workshopsQuery.refetch(), categoriesQuery.refetch()]);
-      }}
       style={[styles.screenContent, { paddingTop: topSpacing }]}
     >
-      <View style={styles.toolbar}>
-        <Animated.View style={[styles.searchShell, { width: searchWidth }]}>
-          {searchExpanded ? (
-            <TextInput
-              ref={searchInputRef}
-              placeholder="Поиск сервисов"
-              placeholderTextColor={colors.muted}
-              style={styles.searchInput}
-              value={search}
-              onChangeText={setSearch}
-              returnKeyType="search"
-              selectionColor={colors.accent}
-            />
-          ) : null}
-          <Pressable
-            onPress={searchExpanded ? closeSearch : () => setSearchExpanded(true)}
-            style={styles.searchButton}
-          >
-            <Ionicons
-              name={searchExpanded ? 'close' : 'search'}
-              size={20}
-              color={searchExpanded ? colors.accentDark : colors.text}
-            />
-          </Pressable>
-        </Animated.View>
-      </View>
+      <View style={styles.stickyHead}>
+        <View style={styles.toolbar}>
+          <Animated.View style={[styles.searchShell, { width: searchWidth }]}>
+            {searchExpanded ? (
+              <TextInput
+                ref={searchInputRef}
+                placeholder="Поиск сервисов"
+                placeholderTextColor={colors.muted}
+                style={styles.searchInput}
+                value={search}
+                onChangeText={setSearch}
+                returnKeyType="search"
+                selectionColor={colors.accent}
+              />
+            ) : null}
+            <Pressable
+              onPress={searchExpanded ? closeSearch : () => setSearchExpanded(true)}
+              style={styles.searchButton}
+            >
+              <Ionicons
+                name={searchExpanded ? 'close' : 'search'}
+                size={20}
+                color={searchExpanded ? colors.accentDark : colors.text}
+              />
+            </Pressable>
+          </Animated.View>
+        </View>
 
-      <CallStatusBanner />
+        <CallStatusBanner />
 
-      <ScrollView
-        ref={filterRailRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRail}
-      >
+        <ScrollView
+          ref={filterRailRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterRailWrap}
+          contentContainerStyle={styles.filterRail}
+        >
         <Pressable
           onPress={() => setCategoryId(undefined)}
           style={[
@@ -247,50 +249,71 @@ export default function CatalogScreen() {
           </Text>
         </Pressable>
 
-        {categories.map((category, index) => {
-          const palette = filterPalettes[index % filterPalettes.length];
-          const active = categoryId === category.id;
+          {categories.map((category, index) => {
+            const palette = filterPalettes[index % filterPalettes.length];
+            const active = categoryId === category.id;
 
-          return (
-          <Pressable
-            key={category.id}
-            onPress={() => setCategoryId(category.id)}
-            style={[
-              styles.filterCard,
-              {
-                backgroundColor: active ? colors.accent : palette.background,
-                borderColor: active ? colors.accent : palette.border,
-              },
-              active && styles.filterCardActive,
-            ]}
-          >
-            <View
-              style={[
-                styles.filterIconWrap,
-                {
-                  backgroundColor: active ? 'rgba(255, 255, 255, 0.18)' : palette.badge,
-                },
-              ]}
-            >
-              <Ionicons
-                name={getCategoryIcon(category.slug)}
-                size={20}
-                color={active ? '#FFFFFF' : palette.icon}
-              />
-            </View>
-            <Text
-              numberOfLines={2}
-              style={[styles.filterTitle, active && styles.filterTitleActive]}
-            >
-              {category.name}
-            </Text>
-          </Pressable>
-          );
-        })}
-      </ScrollView>
+            return (
+              <Pressable
+                key={category.id}
+                onPress={() => setCategoryId(category.id)}
+                style={[
+                  styles.filterCard,
+                  {
+                    backgroundColor: active ? colors.accent : palette.background,
+                    borderColor: active ? colors.accent : palette.border,
+                  },
+                  active && styles.filterCardActive,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.filterIconWrap,
+                    {
+                      backgroundColor: active ? 'rgba(255, 255, 255, 0.18)' : palette.badge,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={getCategoryIcon(category.slug)}
+                    size={20}
+                    color={active ? '#FFFFFF' : palette.icon}
+                  />
+                </View>
+                <Text
+                  numberOfLines={2}
+                  style={[styles.filterTitle, active && styles.filterTitleActive]}
+                >
+                  {category.name}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-      <View style={styles.list}>
-        {(workshopsQuery.data ?? []).length ? (
+      <ScrollView
+        style={styles.listScroll}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.accent]}
+            tintColor={colors.accent}
+            refreshing={workshopsQuery.isRefetching || categoriesQuery.isRefetching}
+            onRefresh={() => {
+              void Promise.all([workshopsQuery.refetch(), categoriesQuery.refetch()]);
+            }}
+          />
+        }
+      >
+        {workshopsQuery.isLoading ? (
+          <>
+            <WorkshopCardSkeleton />
+            <WorkshopCardSkeleton />
+            <WorkshopCardSkeleton />
+          </>
+        ) : (workshopsQuery.data ?? []).length ? (
           (workshopsQuery.data ?? []).map((workshop) => (
             <WorkshopCard
               key={workshop.id}
@@ -313,17 +336,35 @@ export default function CatalogScreen() {
             </Text>
           </View>
         )}
-      </View>
+      </ScrollView>
+
+      <CallMasterFab />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   screenContent: {
+    flex: 1,
     paddingTop: 8,
     paddingHorizontal: 16,
-    paddingBottom: 28,
+    paddingBottom: 0,
+    gap: 12,
+  },
+  stickyHead: {
+    gap: 12,
+  },
+  filterRailWrap: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  listScroll: {
+    flex: 1,
+  },
+  list: {
     gap: 14,
+    paddingTop: 6,
+    paddingBottom: 120,
   },
   toolbar: {
     width: '100%',
@@ -440,9 +481,6 @@ const styles = StyleSheet.create({
   },
   filterTitleActive: {
     color: '#FFFFFF',
-  },
-  list: {
-    gap: 12,
   },
   emptyCard: {
     padding: 22,

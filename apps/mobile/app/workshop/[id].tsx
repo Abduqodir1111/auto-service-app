@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReportTargetType, UserRole, WorkshopDetails } from '@stomvp/shared';
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
+import { WorkshopDetailSkeleton } from '../../components/skeleton';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
@@ -142,7 +143,15 @@ export default function WorkshopDetailsScreen() {
   if (!workshop) {
     return (
       <Screen edges={['left', 'right', 'bottom']} style={styles.screenContent}>
-        <Text>Загружаем карточку...</Text>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.topBar, { paddingTop: insets.top + 4 }]}>
+          <Pressable onPress={() => router.back()} style={styles.topBarButton}>
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
+          </Pressable>
+          <Text style={styles.topBarTitle}>Карточка СТО</Text>
+          <View style={styles.topBarSpacer} />
+        </View>
+        <WorkshopDetailSkeleton />
       </Screen>
     );
   }
