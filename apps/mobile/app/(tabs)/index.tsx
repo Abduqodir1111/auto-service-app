@@ -240,7 +240,7 @@ export default function CatalogScreen() {
           >
             <Ionicons
               name="grid-outline"
-              size={20}
+              size={24}
               color={!categoryId ? '#FFFFFF' : colors.accentDark}
             />
           </View>
@@ -276,7 +276,7 @@ export default function CatalogScreen() {
                 >
                   <Ionicons
                     name={getCategoryIcon(category.slug)}
-                    size={20}
+                    size={24}
                     color={active ? '#FFFFFF' : palette.icon}
                   />
                 </View>
@@ -395,56 +395,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterRail: {
-    gap: 12,
+    gap: 10,
     paddingRight: 16,
-  },
-  callMasterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 22,
-    backgroundColor: '#D75A43',
-    marginBottom: 4,
-  },
-  callMasterIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  callMasterCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  callMasterTitle: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  callMasterSubtitle: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 13,
+    paddingVertical: 4,
   },
   filterCard: {
-    width: 126,
-    minHeight: 86,
-    padding: 14,
-    borderRadius: 24,
-    justifyContent: 'space-between',
+    width: 96,
+    height: 108,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: '#151515',
-    shadowOpacity: 0.06,
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowRadius: 20,
+    shadowColor: '#1A1410',
+    shadowOpacity: 0.07,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 14,
     elevation: 2,
   },
   filterCardAll: {
@@ -456,14 +426,15 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   filterCardActive: {
-    borderColor: colors.accent,
-    shadowOpacity: 0.1,
-    elevation: 4,
+    transform: [{ translateY: -2 }],
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 6,
   },
   filterIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -471,13 +442,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFE3D0',
   },
   filterIconWrapActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
   },
   filterTitle: {
     color: colors.text,
-    fontWeight: '600',
-    fontSize: 15,
-    lineHeight: 18,
+    fontWeight: '700',
+    fontSize: 12,
+    lineHeight: 15,
+    textAlign: 'center',
+    letterSpacing: 0.1,
   },
   filterTitleActive: {
     color: '#FFFFFF',
