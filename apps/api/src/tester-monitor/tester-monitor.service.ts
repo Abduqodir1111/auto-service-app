@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
-import { TelegramClient } from './telegram.client';
+import { TelegramClient } from '../telegram/telegram.client';
 
 /**
  * Daily report on Closed-Testing tester activity. Pulls every user marked

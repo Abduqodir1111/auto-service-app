@@ -41,6 +41,22 @@ export class ApplicationsService {
       throw new NotFoundException('Workshop not found');
     }
 
+    // Double-tap guard: if this customer just sent an application to the
+    // same workshop seconds ago, return that one instead of creating a
+    // duplicate. Server-side dedup — no request header needed, so 1.0.3
+    // is covered too. A genuine second request minutes later still works.
+    const recentDuplicate = await this.prisma.application.findFirst({
+      where: {
+        customerId: userId,
+        workshopId: dto.workshopId,
+        createdAt: { gt: new Date(Date.now() - 30_000) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (recentDuplicate) {
+      return recentDuplicate;
+    }
+
     const application = await this.prisma.application.create({
       data: {
         customerId: userId,
