@@ -97,6 +97,25 @@ export class ServiceCallsService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('Only clients can call masters');
     }
 
+    // Idempotency / double-tap guard: a client may only have one live call.
+    // If they already have a SEARCHING or ASSIGNED call, return it instead
+    // of spawning a second one (which would ring masters twice). Works for
+    // every client build, including 1.0.3, since it needs no request header.
+    const existing = await this.prisma.serviceCall.findFirst({
+      where: {
+        clientId,
+        status: { in: [ServiceCallStatus.SEARCHING, ServiceCallStatus.ASSIGNED] },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        client: { select: { id: true, fullName: true, phone: true } },
+        assignedMaster: { select: { id: true, fullName: true, phone: true } },
+      },
+    });
+    if (existing) {
+      return this.serialize(existing);
+    }
+
     const category = await this.prisma.category.findUnique({
       where: { id: dto.categoryId },
     });

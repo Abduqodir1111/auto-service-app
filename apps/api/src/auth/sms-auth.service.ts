@@ -5,12 +5,14 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { TelegramClient } from '../telegram/telegram.client';
 import { formatUzPhoneForSms, formatUzPhoneForStorage } from './auth.utils';
 
 type PendingSignUpCode = {
@@ -34,6 +36,7 @@ export class SmsAuthService {
   private static readonly REVIEW_BYPASS_PHONE = '+998900000099';
   private static readonly REVIEW_BYPASS_CODE = '00000';
 
+  private readonly logger = new Logger(SmsAuthService.name);
   private readonly providerBaseUrl: string;
   private readonly providerToken?: string;
   private readonly serviceName: string;
@@ -45,6 +48,7 @@ export class SmsAuthService {
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    private readonly telegram: TelegramClient,
   ) {
     this.providerBaseUrl = this.configService.get<string>(
       'DEVSMS_API_BASE_URL',
@@ -223,9 +227,44 @@ export class SmsAuthService {
     }
 
     if (!response.ok || !payload.success) {
-      throw new BadGatewayException(
-        payload.error || payload.message || 'Не удалось отправить SMS-код',
+      const reason = payload.error || payload.message || 'Не удалось отправить SMS-код';
+      void this.alertIfBalanceProblem(reason);
+      throw new BadGatewayException(reason);
+    }
+  }
+
+  /**
+   * Detect "out of balance" style failures from DevSMS and ping the admin
+   * on Telegram. Reactive (fires on the first failed send) since DevSMS
+   * has no balance-query endpoint. Throttled to one alert per hour via
+   * Redis so a depleted account doesn't spam the chat on every signup.
+   */
+  private async alertIfBalanceProblem(reason: string) {
+    const lower = reason.toLowerCase();
+    const looksLikeBalance = [
+      'balance',
+      'баланс',
+      'недостаточно',
+      'insufficient',
+      'не хватает',
+      'пополни',
+      'top up',
+    ].some((needle) => lower.includes(needle));
+
+    if (!looksLikeBalance) return;
+
+    try {
+      const throttleKey = 'alert:devsms:balance';
+      const alreadySent = await this.redisService.getJson(throttleKey);
+      if (alreadySent) return;
+      await this.redisService.setJson(throttleKey, { at: Date.now() }, 3600);
+
+      await this.telegram.sendAdminMessage(
+        `⚠️ <b>DevSMS</b>: похоже, закончился баланс — регистрации по SMS могут не проходить.\n\nОтвет шлюза: <code>${reason.slice(0, 200)}</code>\n\nПополните счёт на devsms.uz.`,
       );
+      this.logger.warn(`DevSMS balance alert sent: ${reason}`);
+    } catch (err) {
+      this.logger.warn(`Balance alert failed: ${(err as Error).message}`);
     }
   }
 
