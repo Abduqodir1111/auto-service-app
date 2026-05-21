@@ -47,3 +47,11 @@ apps/mobile/credentials/
 apps/mobile/credentials.json
 apps/mobile/**/*-firebase-adminsdk-*.json
 apps/mobile/**/AuthKey_*.p8
+
+# Local secrets / credentials notes — never commit
+SECRETS.local.md
+*.secret.local.*
+credentials.local.*
+
+# Claude Code working directory
+.claude/
