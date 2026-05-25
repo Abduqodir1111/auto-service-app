@@ -16,9 +16,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   async hydrate() {
     const raw = await SecureStore.getItemAsync(STORAGE_KEY);
+    const session = raw ? (JSON.parse(raw) as Partial<AuthPayload>) : null;
+
+    if (session && (!session.accessToken || !session.refreshToken || !session.user)) {
+      await SecureStore.deleteItemAsync(STORAGE_KEY);
+      set({ hydrated: true, session: null });
+      return;
+    }
+
     set({
       hydrated: true,
-      session: raw ? (JSON.parse(raw) as AuthPayload) : null,
+      session: session ? (session as AuthPayload) : null,
     });
   },
   async setSession(session) {

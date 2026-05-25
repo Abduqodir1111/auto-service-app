@@ -48,7 +48,7 @@ export function AppShell() {
             <strong>{auth?.user.fullName}</strong>
             <span>{auth?.user.phone}</span>
           </div>
-          <button className="button button--ghost" onClick={logout}>
+          <button className="button button--ghost" onClick={() => void logout()}>
             Выйти
           </button>
         </div>

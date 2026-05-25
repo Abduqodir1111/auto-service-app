@@ -379,6 +379,10 @@ export default function ProfileScreen() {
 
       <Pressable
         onPress={async () => {
+          const refreshToken = useAuthStore.getState().session?.refreshToken;
+          if (refreshToken) {
+            await api.post('/auth/logout', { refreshToken }).catch(() => undefined);
+          }
           await setSession(null);
           router.replace('/(auth)/sign-in');
         }}

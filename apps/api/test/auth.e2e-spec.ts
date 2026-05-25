@@ -128,6 +128,7 @@ describe('Auth (e2e)', () => {
 
       expect(register.body).toMatchObject({
         accessToken: expect.any(String),
+        refreshToken: expect.any(String),
         user: {
           phone: REVIEW_PHONE,
           fullName: 'Brand New User',
@@ -143,6 +144,7 @@ describe('Auth (e2e)', () => {
         .expect(201);
 
       expect(login.body.accessToken).toEqual(expect.any(String));
+      expect(login.body.refreshToken).toEqual(expect.any(String));
     });
   });
 
@@ -164,8 +166,43 @@ describe('Auth (e2e)', () => {
 
       expect(res.body).toMatchObject({
         accessToken: expect.any(String),
+        refreshToken: expect.any(String),
         user: { phone: '+998900000010', role: 'CLIENT' },
       });
+    });
+
+    it('refreshes access with token rotation and supports logout', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ phone: '+998900000010', password: 'CorrectPass1!' })
+        .expect(201);
+
+      const refresh = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(201);
+
+      expect(refresh.body).toMatchObject({
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        user: { phone: '+998900000010', role: 'CLIENT' },
+      });
+      expect(refresh.body.refreshToken).not.toEqual(login.body.refreshToken);
+
+      await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(401);
+
+      await request(app.getHttpServer())
+        .post('/api/auth/logout')
+        .send({ refreshToken: refresh.body.refreshToken })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: refresh.body.refreshToken })
+        .expect(401);
     });
 
     it('rejects a wrong password with 401', async () => {

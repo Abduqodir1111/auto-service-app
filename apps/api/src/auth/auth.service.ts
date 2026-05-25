@@ -7,14 +7,18 @@ import {
   HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
-import { UserRole as DbUserRole } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma, User, UserRole as DbUserRole } from '@prisma/client';
 import { UserRole } from '@stomvp/shared';
 import { compare, hash } from 'bcrypt';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
+import { Request } from 'express';
 import Redis from 'ioredis';
 import { PrismaService } from '../database/prisma.service';
 import { REDIS } from '../redis/redis.constants';
 import { UsersService } from '../users/users.service';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { SignInDto } from './dto/sign-in.dto';
 import { SignUpDto } from './dto/sign-up.dto';
 import { RequestSignUpCodeDto } from './dto/request-sign-up-code.dto';
@@ -40,12 +44,21 @@ const LOGIN_LOCK_KEY = (phone: string) => `auth:login:lock:${phone}`;
 const MAX_ATTEMPTS = 5;
 const ATTEMPT_WINDOW_SECONDS = 15 * 60; // 15 min sliding counter
 const LOCKOUT_SECONDS = 15 * 60; // 15 min lock after the 5th fail
+const REFRESH_TOKEN_BYTES = 48;
+const MAX_STORED_USER_AGENT_LENGTH = 255;
+const MAX_STORED_IP_LENGTH = 64;
+
+type RefreshContext = {
+  userAgent?: string | null;
+  ipAddress?: string | null;
+};
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
     private readonly usersService: UsersService,
     private readonly smsAuthService: SmsAuthService,
     @Inject(REDIS) private readonly redis: Redis,
@@ -59,7 +72,7 @@ export class AuthService {
     return this.smsAuthService.verifySignUpCode(dto.phone, dto.code);
   }
 
-  async register(dto: SignUpDto) {
+  async register(dto: SignUpDto, request?: Request) {
     if (dto.role === UserRole.ADMIN) {
       throw new BadRequestException('Admin registration is not available in public flow');
     }
@@ -92,10 +105,10 @@ export class AuthService {
       },
     });
 
-    return this.buildAuthResponse(user.id);
+    return this.buildAuthResponse(user.id, this.getRefreshContext(request));
   }
 
-  async login(dto: SignInDto) {
+  async login(dto: SignInDto, request?: Request) {
     const normalizedPhone = formatUzPhoneForStorage(dto.phone);
 
     // Lockout check happens first — even before DB lookup — so a locked
@@ -135,7 +148,7 @@ export class AuthService {
     // Success — wipe the failure counter so the next bad login starts
     // fresh, not from a near-locked state.
     await this.redis.del(LOGIN_FAIL_KEY(normalizedPhone));
-    return this.buildAuthResponse(user.id);
+    return this.buildAuthResponse(user.id, this.getRefreshContext(request));
   }
 
   private async recordLoginFailure(phone: string) {
@@ -156,18 +169,176 @@ export class AuthService {
     return this.usersService.serialize(user);
   }
 
-  private async buildAuthResponse(userId: string) {
-    const user = await this.usersService.getByIdOrThrow(userId);
-    // JWT payload is intentionally minimal — no PII. Phone, name and
-    // any other fields are looked up from the DB by `sub` in JwtStrategy.validate().
-    const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      role: user.role as UserRole,
+  async refresh(dto: RefreshTokenDto, request?: Request) {
+    const parsed = this.parseRefreshToken(dto.refreshToken);
+    if (!parsed) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const session = await this.prisma.refreshSession.findUnique({
+      where: { id: parsed.sessionId },
+      include: { user: true },
     });
+
+    if (
+      !session ||
+      session.revokedAt ||
+      session.expiresAt <= new Date() ||
+      !this.tokenHashesMatch(session.tokenHash, this.hashRefreshSecret(parsed.secret))
+    ) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (session.user.isBlocked) {
+      await this.prisma.refreshSession.update({
+        where: { id: session.id },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Account is blocked');
+    }
+
+    const context = this.getRefreshContext(request);
+
+    return this.prisma.$transaction(async (tx) => {
+      const revoked = await tx.refreshSession.updateMany({
+        where: {
+          id: session.id,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      });
+
+      if (revoked.count !== 1) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      const refreshToken = await this.issueRefreshSession(tx, session.userId, context);
+      const accessToken = await this.signAccessToken(session.user);
+
+      return {
+        accessToken,
+        refreshToken,
+        user: this.usersService.serialize(session.user),
+      };
+    });
+  }
+
+  async logout(dto: RefreshTokenDto) {
+    const parsed = this.parseRefreshToken(dto.refreshToken);
+    if (!parsed) {
+      return { success: true };
+    }
+
+    await this.prisma.refreshSession.updateMany({
+      where: {
+        id: parsed.sessionId,
+        tokenHash: this.hashRefreshSecret(parsed.secret),
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
+    });
+
+    return { success: true };
+  }
+
+  private async buildAuthResponse(userId: string, context: RefreshContext) {
+    const user = await this.usersService.getByIdOrThrow(userId);
+    const [accessToken, refreshToken] = await Promise.all([
+      this.signAccessToken(user),
+      this.issueRefreshSession(this.prisma, user.id, context),
+    ]);
 
     return {
       accessToken,
+      refreshToken,
       user: this.usersService.serialize(user),
+    };
+  }
+
+  private signAccessToken(user: Pick<User, 'id' | 'role'>) {
+    // JWT payload is intentionally minimal — no PII. Phone, name and
+    // any other fields are looked up from the DB by `sub` in JwtStrategy.validate().
+    return this.jwtService.signAsync({
+      sub: user.id,
+      role: user.role as UserRole,
+    });
+  }
+
+  private async issueRefreshSession(
+    client: Prisma.TransactionClient | PrismaService,
+    userId: string,
+    context: RefreshContext,
+  ) {
+    await client.refreshSession.deleteMany({
+      where: {
+        userId,
+        expiresAt: {
+          lt: new Date(),
+        },
+      },
+    });
+
+    const id = randomUUID();
+    const secret = randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
+    const ttlDays = Number(this.configService.get<number | string>('REFRESH_TOKEN_TTL_DAYS', 30));
+    const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
+
+    await client.refreshSession.create({
+      data: {
+        id,
+        userId,
+        tokenHash: this.hashRefreshSecret(secret),
+        userAgent: context.userAgent,
+        ipAddress: context.ipAddress,
+        expiresAt,
+      },
+    });
+
+    return `${id}.${secret}`;
+  }
+
+  private parseRefreshToken(token: string) {
+    const [sessionId, secret, ...rest] = token.split('.');
+
+    if (!sessionId || !secret || rest.length > 0) {
+      return null;
+    }
+
+    return { sessionId, secret };
+  }
+
+  private hashRefreshSecret(secret: string) {
+    return createHash('sha256').update(secret).digest('hex');
+  }
+
+  private tokenHashesMatch(expectedHex: string, actualHex: string) {
+    const expected = Buffer.from(expectedHex, 'hex');
+    const actual = Buffer.from(actualHex, 'hex');
+
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  }
+
+  private getRefreshContext(request?: Request): RefreshContext {
+    if (!request) {
+      return {};
+    }
+
+    const forwardedFor = request.headers['x-forwarded-for'];
+    const forwardedIp = Array.isArray(forwardedFor)
+      ? forwardedFor[0]
+      : forwardedFor?.split(',')[0]?.trim();
+    const ipAddress = (forwardedIp || request.ip || request.socket.remoteAddress || '').slice(
+      0,
+      MAX_STORED_IP_LENGTH,
+    );
+    const userAgent = (request.headers['user-agent'] || '').slice(
+      0,
+      MAX_STORED_USER_AGENT_LENGTH,
+    );
+
+    return {
+      userAgent: userAgent || null,
+      ipAddress: ipAddress || null,
     };
   }
 }

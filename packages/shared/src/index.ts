@@ -97,6 +97,7 @@ export type AuthUser = {
 
 export type AuthPayload = {
   accessToken: string;
+  refreshToken: string;
   user: AuthUser;
 };
 

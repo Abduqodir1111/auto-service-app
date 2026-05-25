@@ -22,6 +22,8 @@ const TABLES_IN_FK_SAFE_ORDER = [
   'Application',
   'Favorite',
   'Review',
+  'RefreshSession',
+  'DeviceToken',
   'WorkshopPhoto',
   'WorkshopService',
   'WorkshopCategory',
