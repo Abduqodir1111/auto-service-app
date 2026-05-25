@@ -17,10 +17,10 @@ import {
 import { ModerationAction, ModerationEntityType, PhotoStatus } from '@prisma/client';
 import { PhotoStatus as ApiPhotoStatus, UserRole } from '@stomvp/shared';
 import { randomUUID } from 'crypto';
-import { extname } from 'path';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { S3_CLIENT } from './uploads.constants';
+import { sanitizeWorkshopPhoto } from './uploads.image';
 import { buildUploadsProxyUrl } from './uploads.utils';
 
 const WORKSHOP_PUBLIC_CACHE_PREFIX = 'workshops:public:';
@@ -81,14 +81,16 @@ export class UploadsService implements OnModuleInit {
       throw new ForbiddenException('You cannot upload photos to this workshop');
     }
 
-    const key = `workshops/${workshopId}/${randomUUID()}${extname(file.originalname) || '.jpg'}`;
+    const sanitizedPhoto = await sanitizeWorkshopPhoto(file);
+    const key = `workshops/${workshopId}/${randomUUID()}${sanitizedPhoto.extension}`;
 
     await this.s3.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
+        Body: sanitizedPhoto.buffer,
+        ContentType: sanitizedPhoto.mimeType,
+        CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
 

@@ -24,6 +24,7 @@ import { CurrentUser, JwtUser } from '../common/decorators/current-user.decorato
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { PHOTO_UPLOAD_MAX_BYTES } from './uploads.image';
 import { UploadsService } from './uploads.service';
 import { getRequestOrigin } from './uploads.utils';
 
@@ -90,7 +91,7 @@ export class UploadsController {
     FileInterceptor('file', {
       storage: multer.memoryStorage(),
       limits: {
-        fileSize: 5 * 1024 * 1024,
+        fileSize: PHOTO_UPLOAD_MAX_BYTES,
       },
     }),
   )
