@@ -39,15 +39,22 @@ async function bootstrap() {
     }),
   );
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('MasterTop API')
-    .setDescription('MVP API для платформы поиска СТО и автомастеров')
-    .setVersion('0.1.0')
-    .addBearerAuth()
-    .build();
+  const swaggerEnabled =
+    process.env.ENABLE_SWAGGER !== undefined
+      ? process.env.ENABLE_SWAGGER === 'true'
+      : process.env.NODE_ENV !== 'production';
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+  if (swaggerEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('MasterTop API')
+      .setDescription('MVP API для платформы поиска СТО и автомастеров')
+      .setVersion('0.1.0')
+      .addBearerAuth()
+      .build();
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   // Listen for SIGTERM/SIGINT from PM2 reload. With this on, NestJS will
   // wait for in-flight HTTP requests, then call OnModuleDestroy hooks

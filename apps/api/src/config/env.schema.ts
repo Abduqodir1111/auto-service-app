@@ -6,6 +6,10 @@ const envSchema = z.object({
   APP_URL: z.string().url().default('http://localhost:3100'),
   WEB_URL: z.string().default('http://localhost:5173'),
   MOBILE_DEEP_LINK: z.string().default('mastertop://'),
+  ENABLE_SWAGGER: z
+    .string()
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === 'true')),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(16),
   JWT_EXPIRES_IN: z.string().default('7d'),
