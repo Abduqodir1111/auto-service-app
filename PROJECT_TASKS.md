@@ -7,7 +7,7 @@ Last updated: 2026-05-25
 - [x] Починить локальное окружение: переустановить зависимости и добиться, чтобы API и admin собирались без ошибок.
 - [x] Закрыть публичный Swagger `/docs` на production.
 - [x] Отключить cleartext HTTP в Android release, оставить только HTTPS.
-- [ ] Исправить deploy-процесс на VPS: перейти на `npm ci`, убрать грязный `package-lock.json`.
+- [x] Исправить deploy-процесс на VPS: перейти на `npm ci`, убрать грязный `package-lock.json`.
 - [ ] Запускать backend не от `root`, а от отдельного пользователя `stomvp`.
 - [ ] Настроить off-server backup: база и MinIO должны копироваться не только на тот же VPS.
 
