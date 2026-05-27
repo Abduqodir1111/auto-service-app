@@ -51,6 +51,8 @@ export async function seedTestCategories(): Promise<void> {
       { name: 'Электрика', slug: 'electrics' },
       { name: 'Шиномонтаж', slug: 'tire-service' },
       { name: 'Двигатель', slug: 'engine' },
+      { name: 'АЗС', slug: 'gas-station' },
+      { name: 'Замена масла', slug: 'oil-change' },
     ],
   });
 }
