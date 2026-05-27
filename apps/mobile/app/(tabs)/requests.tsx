@@ -5,6 +5,7 @@ import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
+import { useResponsive } from '../../src/utils/responsive';
 
 type ApplicationItem = {
   id: string;
@@ -22,6 +23,8 @@ type ApplicationItem = {
 export default function RequestsScreen() {
   const queryClient = useQueryClient();
   const role = useAuthStore((state) => state.session?.user.role);
+  const layout = useResponsive();
+  const compact = layout.isSmallPhone;
 
   const requestsQuery = useQuery({
     queryKey: ['applications', role],
@@ -46,14 +49,26 @@ export default function RequestsScreen() {
 
   return (
     <Screen refreshing={requestsQuery.isRefetching} onRefresh={() => void requestsQuery.refetch()}>
-      <Text style={styles.title}>
+      <Text style={[styles.title, { fontSize: layout.font(28, 0.25, 24, 30) }]}>
         {role === UserRole.MASTER ? 'Заявки от клиентов' : 'Мои обращения'}
       </Text>
 
-      <View style={styles.stack}>
+      <View style={[styles.stack, { gap: compact ? 10 : 14 }]}>
         {(requestsQuery.data ?? []).map((item) => (
-          <View key={item.id} style={styles.card}>
-            <Text style={styles.cardTitle}>{item.workshop?.title ?? 'Мастерская'}</Text>
+          <View
+            key={item.id}
+            style={[
+              styles.card,
+              {
+                borderRadius: compact ? 18 : 22,
+                padding: compact ? 14 : 18,
+                gap: compact ? 8 : 10,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { fontSize: layout.font(18, 0.2, 16, 19) }]}>
+              {item.workshop?.title ?? 'Мастерская'}
+            </Text>
             <Text style={styles.muted}>
               {item.customerName} • {item.customerPhone}
             </Text>
@@ -61,7 +76,7 @@ export default function RequestsScreen() {
             <Text style={styles.status}>{item.status}</Text>
 
             {role === UserRole.MASTER ? (
-              <View style={styles.actions}>
+              <View style={[styles.actions, compact && styles.actionsStack]}>
                 <Pressable
                   onPress={() =>
                     updateStatus.mutate({
@@ -69,7 +84,7 @@ export default function RequestsScreen() {
                       status: ApplicationStatus.IN_PROGRESS,
                     })
                   }
-                  style={styles.actionButton}
+                  style={[styles.actionButton, compact && styles.actionButtonStacked]}
                 >
                   <Text style={styles.actionText}>В работу</Text>
                 </Pressable>
@@ -80,7 +95,7 @@ export default function RequestsScreen() {
                       status: ApplicationStatus.COMPLETED,
                     })
                   }
-                  style={styles.actionButton}
+                  style={[styles.actionButton, compact && styles.actionButtonStacked]}
                 >
                   <Text style={styles.actionText}>Завершено</Text>
                 </Pressable>
@@ -125,11 +140,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  actionsStack: {
+    flexDirection: 'column',
+  },
   actionButton: {
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: '#FFF0E5',
+  },
+  actionButtonStacked: {
+    alignItems: 'center',
   },
   actionText: {
     color: colors.accentDark,

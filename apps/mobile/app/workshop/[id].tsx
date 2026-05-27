@@ -16,6 +16,7 @@ import { useAuthStore } from '../../src/store/auth-store';
 import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
 import { openExternalMap } from '../../src/utils/maps';
 import { track } from '../../src/utils/analytics';
+import { clamp, useResponsive } from '../../src/utils/responsive';
 
 function getApiErrorMessage(error: unknown, fallback: string) {
   const apiMessage = axios.isAxiosError(error) ? error.response?.data?.message : null;
@@ -36,6 +37,21 @@ export default function WorkshopDetailsScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const session = useAuthStore((state) => state.session);
   const insets = useSafeAreaInsets();
+  const layout = useResponsive();
+  const compact = layout.isSmallPhone;
+  const topBarPaddingTop = Math.max(insets.top - layout.verticalScale(4), compact ? 4 : 8);
+  const topBarButtonSize = compact ? 40 : 44;
+  const heroPhotoWidth = clamp(
+    layout.contentWidth * (compact ? 0.78 : 0.74),
+    compact ? 226 : 250,
+    layout.isTablet ? 380 : 310,
+  );
+  const heroPhotoHeight = Math.round(heroPhotoWidth * 0.68);
+  const cardAdaptiveStyle = {
+    borderRadius: compact ? 18 : 22,
+    padding: compact ? 14 : 18,
+    gap: compact ? 8 : 10,
+  };
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
@@ -142,14 +158,29 @@ export default function WorkshopDetailsScreen() {
 
   if (!workshop) {
     return (
-      <Screen edges={['left', 'right', 'bottom']} style={styles.screenContent}>
+      <Screen
+        edges={['left', 'right', 'bottom']}
+        style={[styles.screenContent, { paddingBottom: compact ? 20 : 28 }]}
+      >
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.topBar, { paddingTop: insets.top + 4 }]}>
-          <Pressable onPress={() => router.back()} style={styles.topBarButton}>
-            <Ionicons name="chevron-back" size={24} color={colors.text} />
+        <View style={[styles.topBar, { paddingTop: topBarPaddingTop }]}>
+          <Pressable
+            onPress={() => router.back()}
+            style={[
+              styles.topBarButton,
+              {
+                width: topBarButtonSize,
+                height: topBarButtonSize,
+                borderRadius: compact ? 14 : 16,
+              },
+            ]}
+          >
+            <Ionicons name="chevron-back" size={compact ? 22 : 24} color={colors.text} />
           </Pressable>
-          <Text style={styles.topBarTitle}>Карточка СТО</Text>
-          <View style={styles.topBarSpacer} />
+          <Text style={[styles.topBarTitle, { fontSize: layout.font(18, 0.2, 16, 18) }]}>
+            Карточка СТО
+          </Text>
+          <View style={{ width: topBarButtonSize, height: topBarButtonSize }} />
         </View>
         <WorkshopDetailSkeleton />
       </Screen>
@@ -185,21 +216,35 @@ export default function WorkshopDetailsScreen() {
       edges={['left', 'right', 'bottom']}
       refreshing={workshopQuery.isRefetching}
       onRefresh={() => void workshopQuery.refetch()}
-      style={styles.screenContent}
+      style={[styles.screenContent, { paddingBottom: compact ? 20 : 28 }]}
     >
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={[styles.topBar, { paddingTop: insets.top + 4 }]}>
-        <Pressable onPress={() => router.back()} style={styles.topBarButton}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
+      <View style={[styles.topBar, { paddingTop: topBarPaddingTop }]}>
+        <Pressable
+          onPress={() => router.back()}
+          style={[
+            styles.topBarButton,
+            {
+              width: topBarButtonSize,
+              height: topBarButtonSize,
+              borderRadius: compact ? 14 : 16,
+            },
+          ]}
+        >
+          <Ionicons name="chevron-back" size={compact ? 22 : 24} color={colors.text} />
         </Pressable>
-        <Text style={styles.topBarTitle}>Карточка СТО</Text>
-        <View style={styles.topBarSpacer} />
+        <Text style={[styles.topBarTitle, { fontSize: layout.font(18, 0.2, 16, 18) }]}>
+          Карточка СТО
+        </Text>
+        <View style={{ width: topBarButtonSize, height: topBarButtonSize }} />
       </View>
 
       <View style={styles.hero}>
         <View style={styles.heroTitleRow}>
-          <Text style={styles.title}>{workshop.title}</Text>
+          <Text style={[styles.title, { fontSize: layout.font(28, 0.25, 24, 30) }]}>
+            {workshop.title}
+          </Text>
           {workshop.isVerifiedMaster ? (
             <View style={styles.verifiedBadge}>
               <Ionicons name="shield-checkmark" size={15} color="#FFFFFF" />
@@ -215,12 +260,35 @@ export default function WorkshopDetailsScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.photoRail}
+        contentContainerStyle={[
+          styles.photoRail,
+          { gap: compact ? 10 : 12, paddingRight: layout.gutter },
+        ]}
       >
         {coverPhotos.length ? (
           coverPhotos.map((photo) => (
-            <View key={photo.id} style={styles.heroPhotoWrap}>
-              <Image source={{ uri: photo.url }} style={styles.heroPhoto} />
+            <View
+              key={photo.id}
+              style={[
+                styles.heroPhotoWrap,
+                {
+                  width: heroPhotoWidth,
+                  height: heroPhotoHeight,
+                  borderRadius: compact ? 20 : 24,
+                },
+              ]}
+            >
+              <Image
+                source={{ uri: photo.url }}
+                style={[
+                  styles.heroPhoto,
+                  {
+                    width: heroPhotoWidth,
+                    height: heroPhotoHeight,
+                    borderRadius: compact ? 20 : 24,
+                  },
+                ]}
+              />
               <Pressable
                 disabled={reportMutation.isPending}
                 onPress={() =>
@@ -233,14 +301,23 @@ export default function WorkshopDetailsScreen() {
             </View>
           ))
         ) : (
-          <View style={styles.heroPhotoEmpty}>
+          <View
+            style={[
+              styles.heroPhotoEmpty,
+              {
+                width: heroPhotoWidth,
+                height: heroPhotoHeight,
+                borderRadius: compact ? 20 : 24,
+              },
+            ]}
+          >
             <Ionicons name="image-outline" size={28} color={colors.accentDark} />
             <Text style={styles.heroPhotoEmptyText}>Фото появятся после загрузки мастером</Text>
           </View>
         )}
       </ScrollView>
 
-      <View style={styles.card}>
+      <View style={[styles.card, cardAdaptiveStyle]}>
         <Text style={styles.description}>{workshop.description}</Text>
         <Text style={styles.meta}>Контакты: {workshop.phone}</Text>
         <Text style={styles.meta}>График: {workshop.openingHours || 'Уточняйте по телефону'}</Text>
@@ -254,8 +331,8 @@ export default function WorkshopDetailsScreen() {
         ) : null}
       </View>
 
-      <View style={styles.card}>
-        <View style={styles.locationHeader}>
+      <View style={[styles.card, cardAdaptiveStyle]}>
+        <View style={[styles.locationHeader, compact && styles.locationHeaderStack]}>
           <Text style={styles.sectionTitle}>Локация</Text>
           {hasCoordinates ? (
             <Pressable
@@ -300,10 +377,10 @@ export default function WorkshopDetailsScreen() {
         )}
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.card, cardAdaptiveStyle]}>
         <Text style={styles.sectionTitle}>Услуги и цены</Text>
         {workshop.services.map((service) => (
-          <View key={service.id} style={styles.serviceRow}>
+          <View key={service.id} style={[styles.serviceRow, compact && styles.serviceRowStack]}>
             <View style={styles.serviceCopy}>
               <Text style={styles.serviceName}>{service.name}</Text>
               {service.description ? (
@@ -317,7 +394,7 @@ export default function WorkshopDetailsScreen() {
         ))}
       </View>
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, compact && styles.actionsStack]}>
         <Pressable
           onPress={() => Linking.openURL(`tel:${workshop.phone}`)}
           style={styles.primaryButton}
@@ -369,7 +446,7 @@ export default function WorkshopDetailsScreen() {
 
       {reportNotice ? <Text style={styles.reportNotice}>{reportNotice}</Text> : null}
 
-      <View style={styles.card}>
+      <View style={[styles.card, cardAdaptiveStyle]}>
         <Text style={styles.sectionTitle}>Отзывы</Text>
         {canReview ? (
           <View style={styles.reviewComposer}>
@@ -480,13 +557,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   topBarTitle: {
-    fontSize: 18,
     fontWeight: '800',
     color: colors.text,
-  },
-  topBarSpacer: {
-    width: 44,
-    height: 44,
   },
   hero: {
     gap: 4,
@@ -498,7 +570,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   title: {
-    fontSize: 28,
     fontWeight: '800',
     color: colors.text,
   },
@@ -592,6 +663,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  locationHeaderStack: {
+    alignItems: 'flex-start',
+  },
   locationChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -609,6 +683,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 14,
+  },
+  serviceRowStack: {
+    flexDirection: 'column',
+    gap: 6,
   },
   serviceCopy: {
     flex: 1,
@@ -629,6 +707,9 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: 10,
+  },
+  actionsStack: {
+    flexDirection: 'column',
   },
   primaryButton: {
     flex: 1,

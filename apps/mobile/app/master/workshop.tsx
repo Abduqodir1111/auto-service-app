@@ -28,6 +28,7 @@ import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
 import { useMapPickerStore } from '../../src/store/map-picker-store';
 import { getDefaultMapCoordinates, openExternalMap } from '../../src/utils/maps';
+import { useResponsive } from '../../src/utils/responsive';
 import { getWorkshopReadiness } from '../../src/utils/workshop-readiness';
 
 const emptyStringToUndefined = (value: unknown) => {
@@ -253,6 +254,14 @@ export default function WorkshopEditorScreen() {
   );
   const isCreateMode = modeParam === 'create';
   const shouldReturnToProfileAfterSave = returnToProfileParam === '1';
+  const layout = useResponsive();
+  const compact = layout.isSmallPhone;
+  const cardRadius = compact ? 18 : 22;
+  const cardPadding = compact ? 14 : 16;
+  const buttonRadius = compact ? 15 : 18;
+  const photoCardWidth = Math.round(
+    Math.min(layout.contentWidth * (compact ? 0.72 : 0.52), compact ? 174 : 190),
+  );
 
   const myWorkshopQuery = useQuery({
     queryKey: ['my-workshops'],
@@ -526,25 +535,32 @@ export default function WorkshopEditorScreen() {
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.screenContent}>
       <View style={styles.hero}>
-        <View style={styles.heroHead}>
+        <View style={[styles.heroHead, compact && styles.heroHeadCompact]}>
           <View style={styles.heroCopy}>
-            <Text style={styles.title}>{screenTitle}</Text>
+            <Text style={[styles.title, { fontSize: layout.font(28, 0.25, 24, 30) }]}>
+              {screenTitle}
+            </Text>
             <Text style={styles.subtitle}>{screenSubtitle}</Text>
           </View>
           {selectedWorkshop ? (
-            <View style={styles.statusBadge}>
+            <View style={[styles.statusBadge, { paddingVertical: compact ? 6 : 8 }]}>
               <Text style={styles.statusBadgeText}>{statusLabels[selectedWorkshop.status]}</Text>
             </View>
           ) : null}
         </View>
         {selectedWorkshop?.rejectionReason ? (
-          <View style={styles.noticeCard}>
+          <View
+            style={[
+              styles.noticeCard,
+              { borderRadius: compact ? 16 : 18, padding: compact ? 12 : 14 },
+            ]}
+          >
             <Ionicons name="alert-circle-outline" size={18} color={colors.warning} />
             <Text style={styles.noticeText}>{selectedWorkshop.rejectionReason}</Text>
           </View>
         ) : null}
         {selectedWorkshop ? (
-          <View style={styles.stageCard}>
+          <View style={[styles.stageCard, { borderRadius: cardRadius, padding: cardPadding }]}>
             <Text style={styles.stageLabel}>Текущая стадия</Text>
             <Text style={styles.stageTitle}>{statusLabels[selectedWorkshop.status]}</Text>
             <View style={styles.progressTrack}>
@@ -667,7 +683,7 @@ export default function WorkshopEditorScreen() {
           <Text style={styles.sectionTitle}>Локация на карте</Text>
         </View>
 
-        <View style={styles.locationCard}>
+        <View style={[styles.locationCard, { borderRadius: cardRadius, padding: cardPadding }]}>
           {latitude != null && longitude != null ? (
             <>
               <Text style={styles.locationTitle}>Точка выбрана</Text>
@@ -685,7 +701,13 @@ export default function WorkshopEditorScreen() {
           )}
 
           <View style={styles.locationActions}>
-            <Pressable onPress={openLocationPicker} style={styles.secondaryButton}>
+            <Pressable
+              onPress={openLocationPicker}
+              style={[
+                styles.secondaryButton,
+                { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
+              ]}
+            >
               <Text style={styles.secondaryText}>
                 {latitude != null && longitude != null ? 'Изменить точку' : 'Выбрать на карте'}
               </Text>
@@ -694,7 +716,10 @@ export default function WorkshopEditorScreen() {
             {latitude != null && longitude != null ? (
               <Pressable
                 onPress={() => openExternalMap(latitude, longitude, watch('title') || 'Локация СТО')}
-                style={styles.ghostButton}
+                style={[
+                  styles.ghostButton,
+                  { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
+                ]}
               >
                 <Text style={styles.ghostText}>Посмотреть</Text>
               </Pressable>
@@ -704,7 +729,9 @@ export default function WorkshopEditorScreen() {
       </View>
 
       <View style={styles.categoryWrap}>
-        <Text style={styles.sectionTitle}>Категории услуг</Text>
+        <Text style={[styles.sectionTitle, { fontSize: layout.font(18, 0.2, 17, 20) }]}>
+          Категории услуг
+        </Text>
         <View style={styles.categoryList}>
           {(categoriesQuery.data ?? []).map((category) => {
             const active = selectedCategories.includes(category.id);
@@ -720,7 +747,11 @@ export default function WorkshopEditorScreen() {
                     { shouldDirty: true },
                   )
                 }
-                style={[styles.categoryChip, active && styles.categoryChipActive]}
+                style={[
+                  styles.categoryChip,
+                  { paddingHorizontal: compact ? 10 : 12, paddingVertical: compact ? 7 : 8 },
+                  active && styles.categoryChipActive,
+                ]}
               >
                 <Ionicons
                   name={getCategoryIcon(category.slug)}
@@ -740,14 +771,17 @@ export default function WorkshopEditorScreen() {
       </View>
 
       <View style={styles.photosSection}>
-        <View style={styles.photosHeader}>
-          <Text style={styles.sectionTitle}>Фото объявления</Text>
+        <View style={[styles.photosHeader, compact && styles.photosHeaderCompact]}>
+          <Text style={[styles.sectionTitle, { fontSize: layout.font(18, 0.2, 17, 20) }]}>
+            Фото объявления
+          </Text>
           <Pressable
             onPress={() => uploadPhoto.mutate()}
             disabled={!activeWorkshopId || uploadPhoto.isPending}
             style={[
               styles.secondaryButton,
               styles.photosButton,
+              { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
               (!activeWorkshopId || uploadPhoto.isPending) && styles.disabledButton,
             ]}
           >
@@ -761,11 +795,17 @@ export default function WorkshopEditorScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.photoRail}
+            contentContainerStyle={[styles.photoRail, { gap: compact ? 10 : 12 }]}
           >
             {photos.map((photo) => (
-              <View key={photo.id} style={styles.photoCard}>
-                <View style={styles.photoImageWrap}>
+              <View
+                key={photo.id}
+                style={[
+                  styles.photoCard,
+                  { width: photoCardWidth, borderRadius: compact ? 20 : 24 },
+                ]}
+              >
+                <View style={[styles.photoImageWrap, { height: Math.round(photoCardWidth * 0.64) }]}>
                   <Image source={{ uri: photo.url }} style={styles.photoImage} />
                   {photo.isPrimary ? (
                     <View style={styles.primaryPhotoBadge}>
@@ -801,7 +841,12 @@ export default function WorkshopEditorScreen() {
             ))}
           </ScrollView>
         ) : (
-          <View style={styles.photoEmpty}>
+          <View
+            style={[
+              styles.photoEmpty,
+              { borderRadius: cardRadius, padding: cardPadding },
+            ]}
+          >
             <Ionicons name="image-outline" size={22} color={colors.muted} />
             <Text style={styles.photoEmptyText}>
               Фото можно добавлять сразу в черновик. В каталоге они появятся после одобрения
@@ -812,9 +857,11 @@ export default function WorkshopEditorScreen() {
       </View>
 
       <View style={styles.servicesWrap}>
-        <Text style={styles.sectionTitle}>Услуги и цены</Text>
+        <Text style={[styles.sectionTitle, { fontSize: layout.font(18, 0.2, 17, 20) }]}>
+          Услуги и цены
+        </Text>
         {fields.map((field, index) => (
-          <View key={field.id} style={styles.serviceCard}>
+          <View key={field.id} style={[styles.serviceCard, { borderRadius: cardRadius, padding: cardPadding }]}>
             <Controller
               control={control}
               name={`services.${index}.name`}
@@ -868,7 +915,13 @@ export default function WorkshopEditorScreen() {
             />
 
             {fields.length > 1 ? (
-              <Pressable onPress={() => remove(index)} style={styles.ghostButton}>
+              <Pressable
+                onPress={() => remove(index)}
+                style={[
+                  styles.ghostButton,
+                  { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
+                ]}
+              >
                 <Text style={styles.ghostText}>Удалить услугу</Text>
               </Pressable>
             ) : null}
@@ -879,7 +932,10 @@ export default function WorkshopEditorScreen() {
           onPress={() =>
             append({ name: '', description: '', priceFrom: undefined, priceTo: undefined })
           }
-          style={styles.secondaryButton}
+          style={[
+            styles.secondaryButton,
+            { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
+          ]}
         >
           <Text style={styles.secondaryText}>Добавить ещё услугу</Text>
         </Pressable>
@@ -887,7 +943,10 @@ export default function WorkshopEditorScreen() {
 
       <Pressable
         onPress={handleSubmit(submitSave)}
-        style={styles.primaryButton}
+        style={[
+          styles.primaryButton,
+          { borderRadius: buttonRadius, paddingVertical: compact ? 14 : 16 },
+        ]}
       >
         <Text style={styles.primaryText}>
           {mutation.isPending ? 'Сохраняем объявление...' : 'Сохранить объявление'}
@@ -910,6 +969,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
+  },
+  heroHeadCompact: {
+    gap: 10,
   },
   heroCopy: {
     flex: 1,
@@ -1073,6 +1135,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     alignItems: 'center',
+  },
+  photosHeaderCompact: {
+    gap: 10,
+    alignItems: 'flex-start',
   },
   photosButton: {
     alignSelf: 'auto',

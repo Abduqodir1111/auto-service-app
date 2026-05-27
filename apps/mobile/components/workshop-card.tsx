@@ -4,6 +4,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WorkshopSummary } from '@stomvp/shared';
 import { getCategoryIcon } from '../src/constants/category-meta';
 import { colors } from '../src/constants/theme';
+import { clamp, useResponsive } from '../src/utils/responsive';
 
 type Props = {
   workshop: WorkshopSummary;
@@ -24,33 +25,61 @@ function formatDistance(meters: number) {
 }
 
 export function WorkshopCard({ workshop, favoriteAction }: Props) {
+  const layout = useResponsive();
   const coverPhoto = workshop.photos.find((photo) => photo.isPrimary) ?? workshop.photos[0];
   const hasCoordinates = workshop.latitude != null && workshop.longitude != null;
+  const compact = layout.isSmallPhone;
+  const coverHeight = clamp(layout.contentWidth * (compact ? 0.52 : 0.5), compact ? 148 : 170, layout.isTablet ? 260 : 210);
+  const actionSize = compact ? 38 : 40;
+  const iconSize = compact ? 16 : 18;
 
   return (
     <Pressable
       onPress={() => router.push(`/workshop/${workshop.id}`)}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      style={({ pressed }) => [
+        styles.card,
+        {
+          borderRadius: compact ? 22 : 28,
+          padding: compact ? 12 : 14,
+          gap: compact ? 12 : 14,
+        },
+        pressed && styles.cardPressed,
+      ]}
     >
-      <View style={styles.cover}>
+      <View style={[styles.cover, { height: coverHeight, borderRadius: compact ? 18 : 22 }]}>
         {coverPhoto ? (
           <Image source={{ uri: coverPhoto.url }} style={styles.coverImage} />
         ) : (
           <View style={styles.coverPlaceholder}>
-            <Ionicons name="car-sport-outline" size={34} color={colors.accentDark} />
+            <Ionicons name="car-sport-outline" size={compact ? 30 : 34} color={colors.accentDark} />
             <Text style={styles.coverPlaceholderText}>Фото объявления</Text>
           </View>
         )}
 
-        <View style={styles.ratingBadge}>
-          <Text style={styles.ratingText}>{workshop.averageRating.toFixed(1)}</Text>
+        <View
+          style={[
+            styles.ratingBadge,
+            {
+              top: compact ? 10 : 12,
+              right: compact ? 10 : 12,
+              minWidth: compact ? 52 : 58,
+              paddingHorizontal: compact ? 10 : 12,
+              paddingVertical: compact ? 8 : 10,
+            },
+          ]}
+        >
+          <Text style={[styles.ratingText, { fontSize: layout.font(18, 0.25, 16, 19) }]}>
+            {workshop.averageRating.toFixed(1)}
+          </Text>
         </View>
       </View>
 
-      <View style={styles.header}>
+      <View style={[styles.header, { gap: compact ? 8 : 12 }]}>
         <View style={styles.titleWrap}>
           <View style={styles.titleRow}>
-            <Text style={styles.title}>{workshop.title}</Text>
+            <Text style={[styles.title, { fontSize: layout.font(18, 0.25, 16, 19) }]}>
+              {workshop.title}
+            </Text>
             {workshop.isVerifiedMaster ? (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="shield-checkmark" size={13} color="#FFFFFF" />
@@ -81,9 +110,12 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
                   },
                 });
               }}
-              style={styles.locationButton}
+              style={[
+                styles.locationButton,
+                { width: actionSize, height: actionSize, borderRadius: compact ? 13 : 14 },
+              ]}
             >
-              <Ionicons name="location-outline" size={18} color={colors.accentDark} />
+              <Ionicons name="location-outline" size={iconSize} color={colors.accentDark} />
             </Pressable>
           ) : null}
 
@@ -96,6 +128,12 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
               }}
               style={({ pressed }) => [
                 styles.favoriteButton,
+                {
+                  height: actionSize,
+                  paddingHorizontal: compact ? 10 : 12,
+                  borderRadius: compact ? 13 : 14,
+                  gap: compact ? 5 : 6,
+                },
                 favoriteAction.isDanger && styles.favoriteButtonDanger,
                 pressed && styles.buttonPressed,
                 favoriteAction.disabled && styles.favoriteButtonDisabled,
@@ -103,12 +141,13 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
             >
               <Ionicons
                 name={favoriteAction.isDanger ? 'heart' : 'heart-outline'}
-                size={18}
+                size={iconSize}
                 color={favoriteAction.isDanger ? '#FFFFFF' : colors.accentDark}
               />
               <Text
                 style={[
                   styles.favoriteButtonText,
+                  { fontSize: layout.font(12, 0.2, 11, 13) },
                   favoriteAction.isDanger && styles.favoriteButtonTextDanger,
                 ]}
               >
@@ -119,19 +158,34 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
         </View>
       </View>
 
-      <Text numberOfLines={2} style={styles.description}>
+      <Text
+        numberOfLines={2}
+        style={[styles.description, { fontSize: layout.font(14, 0.2, 13, 15) }]}
+      >
         {workshop.description}
       </Text>
 
       <View style={styles.chips}>
         {workshop.categories.slice(0, 3).map((category) => (
-          <View key={category.id} style={styles.chip}>
+          <View
+            key={category.id}
+            style={[
+              styles.chip,
+              {
+                paddingHorizontal: compact ? 8 : 10,
+                paddingVertical: compact ? 5 : 6,
+                gap: compact ? 5 : 6,
+              },
+            ]}
+          >
             <Ionicons
               name={getCategoryIcon(category.slug)}
-              size={13}
+              size={compact ? 12 : 13}
               color={colors.success}
             />
-            <Text style={styles.chipText}>{category.name}</Text>
+            <Text style={[styles.chipText, { fontSize: layout.font(12, 0.2, 11, 13) }]}>
+              {category.name}
+            </Text>
           </View>
         ))}
       </View>

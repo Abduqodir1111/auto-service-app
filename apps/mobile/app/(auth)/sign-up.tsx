@@ -14,6 +14,7 @@ import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { usePendingSignUpStore } from '../../src/store/pending-sign-up-store';
 import { track } from '../../src/utils/analytics';
+import { useResponsive } from '../../src/utils/responsive';
 
 const schema = z
   .object({
@@ -38,6 +39,8 @@ type RequestCodeResponse = {
 export default function SignUpScreen() {
   const pendingPayload = usePendingSignUpStore((state) => state.payload);
   const setPendingPayload = usePendingSignUpStore((state) => state.setPayload);
+  const layout = useResponsive();
+  const compact = layout.isSmallPhone;
   const [requestError, setRequestError] = React.useState<string | null>(null);
   const {
     control,
@@ -81,8 +84,19 @@ export default function SignUpScreen() {
 
   return (
     <Screen>
-      <View style={styles.brandWrap}>
-        <Text style={styles.brandTitle}>Регистрация</Text>
+      <View
+        style={[
+          styles.brandWrap,
+          {
+            marginTop: compact ? 18 : 28,
+            marginBottom: compact ? 16 : 24,
+            gap: compact ? 6 : 8,
+          },
+        ]}
+      >
+        <Text style={[styles.brandTitle, { fontSize: layout.font(36, 0.22, 30, 38) }]}>
+          Регистрация
+        </Text>
         <View style={styles.brandUnderline} />
       </View>
 
@@ -90,21 +104,35 @@ export default function SignUpScreen() {
         {roleSelected ? 'Вы регистрируетесь как:' : 'Выберите, кто вы:'}
       </Text>
 
-      <View style={styles.roleRow}>
+      <View style={[styles.roleRow, { gap: compact ? 8 : 10 }]}>
         {[UserRole.CLIENT, UserRole.MASTER].map((value) => {
           const isActive = role === value;
           return (
             <Pressable
               key={value}
               onPress={() => setValue('role', value, { shouldValidate: true })}
-              style={[styles.roleChip, isActive && styles.roleChipActive]}
+              style={[
+                styles.roleChip,
+                {
+                  borderRadius: compact ? 16 : 18,
+                  paddingVertical: compact ? 12 : 16,
+                  paddingHorizontal: compact ? 8 : 10,
+                },
+                isActive && styles.roleChipActive,
+              ]}
             >
               <Ionicons
                 name={value === UserRole.CLIENT ? 'person-outline' : 'construct-outline'}
                 size={22}
                 color={isActive ? colors.accentDark : colors.muted}
               />
-              <Text style={[styles.roleText, isActive && styles.roleTextActive]}>
+              <Text
+                style={[
+                  styles.roleText,
+                  { fontSize: layout.font(14, 0.2, 13, 15) },
+                  isActive && styles.roleTextActive,
+                ]}
+              >
                 {value === UserRole.CLIENT ? 'Я клиент' : 'Я мастер / СТО'}
               </Text>
             </Pressable>
@@ -114,7 +142,16 @@ export default function SignUpScreen() {
 
       {roleSelected ? (
         <>
-          <View style={styles.card}>
+          <View
+            style={[
+              styles.card,
+              {
+                borderRadius: compact ? 20 : 24,
+                padding: compact ? 14 : 18,
+                gap: compact ? 12 : 14,
+              },
+            ]}
+          >
             <Controller
               control={control}
               name="fullName"
@@ -189,6 +226,10 @@ export default function SignUpScreen() {
               })}
               style={({ pressed }) => [
                 styles.primaryButton,
+                {
+                  borderRadius: compact ? 18 : 20,
+                  paddingVertical: compact ? 14 : 16,
+                },
                 pressed && styles.buttonPressed,
                 requestCodeMutation.isPending && styles.buttonDisabled,
               ]}
@@ -201,7 +242,10 @@ export default function SignUpScreen() {
             </Pressable>
           </View>
 
-          <Pressable onPress={() => router.back()} style={styles.backlinkWrap}>
+          <Pressable
+            onPress={() => router.back()}
+            style={[styles.backlinkWrap, { marginTop: compact ? 14 : 20 }]}
+          >
             <Text style={styles.backlinkText}>
               Уже есть аккаунт?{' '}
               <Text style={styles.backlinkAccent}>Войти</Text>

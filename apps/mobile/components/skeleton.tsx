@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View, ViewStyle } from 'react-native';
 import { colors } from '../src/constants/theme';
+import { clamp, useResponsive } from '../src/utils/responsive';
 
 type SkeletonProps = {
   width?: number | `${number}%`;
@@ -56,9 +57,22 @@ export function Skeleton({ width, height, radius = 10, style }: SkeletonProps) {
 
 /** Skeleton stand-in for a WorkshopCard in the catalog list. */
 export function WorkshopCardSkeleton() {
+  const layout = useResponsive();
+  const compact = layout.isSmallPhone;
+  const coverHeight = clamp(layout.contentWidth * (compact ? 0.52 : 0.5), compact ? 148 : 170, layout.isTablet ? 260 : 210);
+
   return (
-    <View style={styles.card}>
-      <Skeleton height={188} radius={22} />
+    <View
+      style={[
+        styles.card,
+        {
+          borderRadius: compact ? 22 : 28,
+          padding: compact ? 12 : 14,
+          gap: compact ? 12 : 14,
+        },
+      ]}
+    >
+      <Skeleton height={coverHeight} radius={compact ? 18 : 22} />
       <View style={styles.row}>
         <View style={{ flex: 1, gap: 8 }}>
           <Skeleton width="70%" height={18} />
@@ -79,6 +93,9 @@ export function WorkshopCardSkeleton() {
 
 /** Skeleton stand-in for the workshop detail screen. */
 export function WorkshopDetailSkeleton() {
+  const layout = useResponsive();
+  const heroHeight = clamp(layout.contentWidth * 0.62, layout.isSmallPhone ? 184 : 204, layout.isTablet ? 300 : 240);
+
   return (
     <View style={{ gap: 16 }}>
       <View style={{ gap: 10 }}>
@@ -86,7 +103,7 @@ export function WorkshopDetailSkeleton() {
         <Skeleton width="60%" height={16} />
       </View>
 
-      <Skeleton height={220} radius={24} />
+      <Skeleton height={heroHeight} radius={layout.isSmallPhone ? 20 : 24} />
 
       <View style={styles.chipRow}>
         <Skeleton width={90} height={28} radius={999} />

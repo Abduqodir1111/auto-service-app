@@ -12,6 +12,7 @@ import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
+import { useResponsive } from '../../src/utils/responsive';
 
 const schema = z.object({
   phone: z.string().min(6, 'Введите телефон'),
@@ -22,6 +23,8 @@ type FormValues = z.infer<typeof schema>;
 
 export default function SignInScreen() {
   const setSession = useAuthStore((state) => state.setSession);
+  const layout = useResponsive();
+  const compact = layout.isSmallPhone;
   const {
     control,
     handleSubmit,
@@ -58,8 +61,19 @@ export default function SignInScreen() {
 
   return (
     <Screen>
-      <View style={styles.brandWrap}>
-        <Text style={styles.brandName}>MasterTop</Text>
+      <View
+        style={[
+          styles.brandWrap,
+          {
+            marginTop: compact ? 18 : layout.isTablet ? 48 : 30,
+            marginBottom: compact ? 18 : 24,
+            gap: compact ? 8 : 10,
+          },
+        ]}
+      >
+        <Text style={[styles.brandName, { fontSize: layout.font(46, 0.22, 34, 48) }]}>
+          MasterTop
+        </Text>
         <View style={styles.brandUnderline} />
       </View>
 
@@ -69,6 +83,10 @@ export default function SignInScreen() {
         onPress={() => router.push('/(auth)/sign-up')}
         style={({ pressed }) => [
           styles.primaryButton,
+          {
+            borderRadius: compact ? 18 : 22,
+            paddingVertical: compact ? 15 : 18,
+          },
           pressed && styles.buttonPressed,
         ]}
       >
@@ -76,13 +94,22 @@ export default function SignInScreen() {
         <Text style={styles.primaryButtonText}>Создать аккаунт</Text>
       </Pressable>
 
-      <View style={styles.dividerRow}>
+      <View style={[styles.dividerRow, { marginVertical: compact ? 14 : 18 }]}>
         <View style={styles.dividerLine} />
         <Text style={styles.dividerText}>или войти</Text>
         <View style={styles.dividerLine} />
       </View>
 
-      <View style={styles.card}>
+      <View
+        style={[
+          styles.card,
+          {
+            borderRadius: compact ? 20 : 24,
+            padding: compact ? 14 : 18,
+            gap: compact ? 12 : 14,
+          },
+        ]}
+      >
         <Controller
           control={control}
           name="phone"
@@ -122,6 +149,10 @@ export default function SignInScreen() {
           onPress={handleSubmit((values) => loginMutation.mutate(values))}
           style={({ pressed }) => [
             styles.secondaryButton,
+            {
+              borderRadius: compact ? 16 : 18,
+              paddingVertical: compact ? 13 : 15,
+            },
             pressed && styles.buttonPressed,
             loginMutation.isPending && styles.buttonDisabled,
           ]}
@@ -136,12 +167,25 @@ export default function SignInScreen() {
 
       {/* Marketing footer — quiet, contextual, no longer competing with
           the form for first attention. */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { marginTop: compact ? 18 : 28 }]}>
         <Text style={styles.footerEyebrow}>MasterTop · Поиск СТО рядом</Text>
-        <Text style={styles.footerTitle}>
+        <Text
+          style={[
+            styles.footerTitle,
+            {
+              fontSize: layout.font(20, 0.22, 18, 22),
+              lineHeight: layout.font(26, 0.18, 24, 28),
+            },
+          ]}
+        >
           Найдите ближайшее СТО без лишних звонков
         </Text>
-        <Text style={styles.footerSubtitle}>
+        <Text
+          style={[
+            styles.footerSubtitle,
+            { lineHeight: layout.font(19, 0.15, 18, 21) },
+          ]}
+        >
           Каталог мастерских, заявки, избранное и управление профилем
           мастера — в одном приложении.
         </Text>

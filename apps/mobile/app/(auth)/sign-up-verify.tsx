@@ -11,6 +11,7 @@ import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
 import { usePendingSignUpStore } from '../../src/store/pending-sign-up-store';
 import { track } from '../../src/utils/analytics';
+import { useResponsive } from '../../src/utils/responsive';
 
 type VerifyCodeResponse = {
   verificationToken: string;
@@ -21,6 +22,8 @@ export default function SignUpVerifyScreen() {
   const setSession = useAuthStore((state) => state.setSession);
   const pendingPayload = usePendingSignUpStore((state) => state.payload);
   const clearPendingPayload = usePendingSignUpStore((state) => state.clear);
+  const layout = useResponsive();
+  const compact = layout.isSmallPhone;
   const [smsCode, setSmsCode] = React.useState('');
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
@@ -108,15 +111,34 @@ export default function SignUpVerifyScreen() {
 
   return (
     <Screen>
-      <View style={{ gap: 8 }}>
-        <Text style={styles.title}>Подтвердите номер</Text>
+      <View style={{ gap: compact ? 6 : 8 }}>
+        <Text
+          style={[
+            styles.title,
+            {
+              marginTop: compact ? 6 : 16,
+              fontSize: layout.font(30, 0.2, 26, 32),
+            },
+          ]}
+        >
+          Подтвердите номер
+        </Text>
         <Text style={styles.subtitle}>
           Мы отправили 5-значный SMS-код на номер {pendingPayload.phone}. Введите его,
           чтобы завершить регистрацию.
         </Text>
       </View>
 
-      <View style={styles.card}>
+      <View
+        style={[
+          styles.card,
+          {
+            borderRadius: compact ? 20 : 24,
+            padding: compact ? 14 : 18,
+            gap: compact ? 12 : 14,
+          },
+        ]}
+      >
         <Field
           label="Код из SMS"
           value={smsCode}
@@ -141,7 +163,14 @@ export default function SignUpVerifyScreen() {
 
             verifyMutation.mutate();
           }}
-          style={[styles.button, verifyMutation.isPending && styles.buttonDisabled]}
+          style={[
+            styles.button,
+            {
+              borderRadius: compact ? 16 : 18,
+              paddingVertical: compact ? 14 : 16,
+            },
+            verifyMutation.isPending && styles.buttonDisabled,
+          ]}
           disabled={verifyMutation.isPending}
         >
           <Text style={styles.buttonText}>
@@ -151,7 +180,14 @@ export default function SignUpVerifyScreen() {
 
         <Pressable
           onPress={() => resendMutation.mutate()}
-          style={[styles.secondaryButton, resendMutation.isPending && styles.buttonDisabled]}
+          style={[
+            styles.secondaryButton,
+            {
+              borderRadius: compact ? 16 : 18,
+              paddingVertical: compact ? 12 : 14,
+            },
+            resendMutation.isPending && styles.buttonDisabled,
+          ]}
           disabled={resendMutation.isPending}
         >
           <Text style={styles.secondaryButtonText}>

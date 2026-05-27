@@ -8,6 +8,7 @@ import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
+import { useResponsive } from '../../src/utils/responsive';
 import { getWorkshopReadinessFromDetails } from '../../src/utils/workshop-readiness';
 
 const statusLabels: Record<WorkshopStatus, string> = {
@@ -49,6 +50,19 @@ export default function ProfileScreen() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
   const setSession = useAuthStore((state) => state.setSession);
+  const layout = useResponsive();
+  const compact = layout.isSmallPhone;
+  const cardAdaptiveStyle = {
+    borderRadius: compact ? 18 : 22,
+    padding: compact ? 14 : 18,
+    gap: compact ? 8 : 10,
+  };
+  const listingAdaptiveStyle = {
+    borderRadius: compact ? 18 : 22,
+    padding: compact ? 14 : 16,
+    gap: compact ? 10 : 12,
+  };
+  const thumbSize = compact ? 74 : 92;
 
   const workshopsQuery = useQuery({
     queryKey: ['my-workshops'],
@@ -155,8 +169,10 @@ export default function ProfileScreen() {
         session?.user.role === UserRole.MASTER ? () => void workshopsQuery.refetch() : undefined
       }
     >
-      <View style={styles.card}>
-        <Text style={styles.name}>{session?.user.fullName}</Text>
+      <View style={[styles.card, cardAdaptiveStyle]}>
+        <Text style={[styles.name, { fontSize: layout.font(26, 0.25, 23, 28) }]}>
+          {session?.user.fullName}
+        </Text>
         <Text style={styles.muted}>
           {session?.user.phone} • {session?.user.role}
         </Text>
@@ -164,8 +180,8 @@ export default function ProfileScreen() {
 
       {session?.user.role === UserRole.MASTER ? (
         <>
-          <View style={[styles.card, styles.onlineCard]}>
-            <View style={styles.onlineRow}>
+          <View style={[styles.card, cardAdaptiveStyle, styles.onlineCard]}>
+            <View style={[styles.onlineRow, compact && styles.onlineRowCompact]}>
               <View style={styles.onlineCopy}>
                 <Text style={styles.sectionTitle}>Принимать срочные вызовы</Text>
                 <Text style={styles.muted}>
@@ -183,7 +199,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, cardAdaptiveStyle]}>
             <Text style={styles.sectionTitle}>Мои объявления</Text>
             <Text style={styles.muted}>
               Создавайте отдельные карточки под разные услуги, филиалы или мастерские.
@@ -191,7 +207,11 @@ export default function ProfileScreen() {
             <Pressable
               onPress={() => createDraftMutation.mutate()}
               disabled={createDraftMutation.isPending}
-              style={[styles.primaryButton, createDraftMutation.isPending && styles.disabledButton]}
+              style={[
+                styles.primaryButton,
+                { borderRadius: compact ? 15 : 18, paddingVertical: compact ? 12 : 14 },
+                createDraftMutation.isPending && styles.disabledButton,
+              ]}
             >
               <Text style={styles.primaryText}>
                 {createDraftMutation.isPending
@@ -225,9 +245,18 @@ export default function ProfileScreen() {
               const readiness = getWorkshopReadinessFromDetails(workshop);
 
               return (
-                <View key={workshop.id} style={styles.listingCard}>
-                  <View style={styles.listingHeader}>
-                    <View style={styles.thumbWrap}>
+                <View key={workshop.id} style={[styles.listingCard, listingAdaptiveStyle]}>
+                  <View style={[styles.listingHeader, compact && styles.listingHeaderCompact]}>
+                    <View
+                      style={[
+                        styles.thumbWrap,
+                        {
+                          width: thumbSize,
+                          height: thumbSize,
+                          borderRadius: compact ? 16 : 20,
+                        },
+                      ]}
+                    >
                       {coverPhoto ? (
                         <Image source={{ uri: coverPhoto.url }} style={styles.thumbImage} />
                       ) : (
@@ -238,7 +267,14 @@ export default function ProfileScreen() {
                     </View>
 
                     <View style={styles.listingCopy}>
-                      <Text style={styles.workshopTitle}>{listingTitle}</Text>
+                      <Text
+                        style={[
+                          styles.workshopTitle,
+                          { fontSize: layout.font(22, 0.25, 19, 24) },
+                        ]}
+                      >
+                        {listingTitle}
+                      </Text>
                       <Text style={styles.muted}>{listingAddress}</Text>
 
                       <View style={styles.badges}>
@@ -324,7 +360,11 @@ export default function ProfileScreen() {
                         ],
                       )
                     }
-                    style={[styles.dangerButton, isDeleting && styles.disabledButton]}
+                    style={[
+                      styles.dangerButton,
+                      { borderRadius: compact ? 15 : 18, paddingVertical: compact ? 12 : 14 },
+                      isDeleting && styles.disabledButton,
+                    ]}
                   >
                     <Text style={styles.dangerText}>
                       {isDeleting ? 'Удаляем объявление...' : 'Удалить объявление'}
@@ -334,8 +374,15 @@ export default function ProfileScreen() {
               );
             })
           ) : (
-            <View style={styles.card}>
-              <Text style={styles.workshopTitle}>Объявлений пока нет</Text>
+            <View style={[styles.card, cardAdaptiveStyle]}>
+              <Text
+                style={[
+                  styles.workshopTitle,
+                  { fontSize: layout.font(22, 0.25, 19, 24) },
+                ]}
+              >
+                Объявлений пока нет
+              </Text>
               <Text style={styles.muted}>
                 Создайте первую карточку, добавьте фото, услуги и точку на карте.
               </Text>
@@ -344,7 +391,7 @@ export default function ProfileScreen() {
         </>
       ) : null}
 
-      <View style={[styles.card, styles.accountDangerCard]}>
+      <View style={[styles.card, cardAdaptiveStyle, styles.accountDangerCard]}>
         <Text style={styles.sectionTitle}>Удаление аккаунта</Text>
         <Text style={styles.muted}>
           Вы можете полностью удалить аккаунт. Профиль, объявления, фото, заявки,
@@ -368,6 +415,7 @@ export default function ProfileScreen() {
           }
           style={[
             styles.deleteAccountButton,
+            { borderRadius: compact ? 15 : 18, paddingVertical: compact ? 12 : 14 },
             deleteAccountMutation.isPending && styles.disabledButton,
           ]}
         >
@@ -386,7 +434,10 @@ export default function ProfileScreen() {
           await setSession(null);
           router.replace('/(auth)/sign-in');
         }}
-        style={styles.secondaryButton}
+        style={[
+          styles.secondaryButton,
+          { borderRadius: compact ? 15 : 18, paddingVertical: compact ? 12 : 14 },
+        ]}
       >
         <Text style={styles.secondaryText}>Выйти</Text>
       </Pressable>
@@ -428,6 +479,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     alignItems: 'flex-start',
+  },
+  listingHeaderCompact: {
+    gap: 10,
   },
   thumbWrap: {
     width: 92,
@@ -598,6 +652,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  onlineRowCompact: {
+    gap: 10,
+    alignItems: 'flex-start',
   },
   onlineCopy: {
     flex: 1,

@@ -11,6 +11,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors } from '../src/constants/theme';
+import { useResponsive } from '../src/utils/responsive';
 
 type Props = PropsWithChildren<{
   scroll?: boolean;
@@ -21,9 +22,19 @@ type Props = PropsWithChildren<{
 }>;
 
 export function Screen({ children, scroll = true, style, edges, refreshing, onRefresh }: Props) {
+  const layout = useResponsive();
+  const adaptiveContentStyle = {
+    width: '100%' as const,
+    maxWidth: layout.contentMaxWidth,
+    alignSelf: 'center' as const,
+    paddingHorizontal: layout.gutter,
+    paddingVertical: layout.isSmallPhone ? 14 : layout.isTablet ? 24 : 20,
+    gap: layout.isSmallPhone ? 12 : 16,
+  };
+
   const content = scroll ? (
     <ScrollView
-      contentContainerStyle={[styles.content, style]}
+      contentContainerStyle={[styles.content, adaptiveContentStyle, style]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       automaticallyAdjustKeyboardInsets
@@ -43,7 +54,7 @@ export function Screen({ children, scroll = true, style, edges, refreshing, onRe
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.content, style]}>{children}</View>
+    <View style={[styles.content, adaptiveContentStyle, style]}>{children}</View>
   );
 
   return (
@@ -64,8 +75,5 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
-    padding: 20,
-    gap: 16,
-  },
+  content: {},
 });

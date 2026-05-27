@@ -21,6 +21,7 @@ import { colors } from '../../src/constants/theme';
 import { getDeviceCoordinates } from '../../src/utils/device-location';
 import { createWorkshopsLeafletHtml } from '../../src/utils/leaflet-html';
 import { getDefaultMapCoordinates } from '../../src/utils/maps';
+import { useResponsive } from '../../src/utils/responsive';
 
 type MapMessage =
   | {
@@ -47,6 +48,11 @@ export default function MapTabScreen() {
   const [isLocating, setIsLocating] = useState(false);
   const filterRailRef = useRef<ScrollView>(null);
   const fallbackCenter = useMemo(() => getDefaultMapCoordinates(), []);
+  const layout = useResponsive();
+  const compact = layout.isSmallPhone;
+  const chipIconSize = compact ? 13 : 14;
+  const locateButtonSize = compact ? 40 : 44;
+  const previewThumbSize = compact ? 62 : 76;
 
   const categoriesQuery = useQuery({
     queryKey: ['categories'],
@@ -191,24 +197,55 @@ export default function MapTabScreen() {
   );
 
   return (
-    <Screen scroll={false} style={styles.screenContent}>
+    <Screen
+      scroll={false}
+      style={[
+        styles.screenContent,
+        {
+          paddingHorizontal: compact ? 8 : 12,
+          paddingBottom: compact ? 8 : 12,
+          gap: compact ? 8 : 10,
+        },
+      ]}
+    >
       <ScrollView
         ref={filterRailRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.filterRailWrap}
-        contentContainerStyle={styles.filterRail}
+        contentContainerStyle={[
+          styles.filterRail,
+          {
+            gap: compact ? 6 : 8,
+            paddingHorizontal: compact ? 2 : 4,
+          },
+        ]}
       >
         <Pressable
           onPress={() => setCategoryId(undefined)}
-          style={[styles.chip, !categoryId && styles.chipActive]}
+          style={[
+            styles.chip,
+            {
+              paddingHorizontal: compact ? 10 : 12,
+              paddingVertical: compact ? 7 : 8,
+            },
+            !categoryId && styles.chipActive,
+          ]}
         >
           <Ionicons
             name="grid-outline"
-            size={14}
+            size={chipIconSize}
             color={!categoryId ? '#FFFFFF' : colors.accentDark}
           />
-          <Text style={[styles.chipText, !categoryId && styles.chipTextActive]}>Все</Text>
+          <Text
+            style={[
+              styles.chipText,
+              { fontSize: layout.font(13, 0.15, 12, 14) },
+              !categoryId && styles.chipTextActive,
+            ]}
+          >
+            Все
+          </Text>
         </Pressable>
 
         {categories.map((category) => {
@@ -217,14 +254,27 @@ export default function MapTabScreen() {
             <Pressable
               key={category.id}
               onPress={() => setCategoryId(active ? undefined : category.id)}
-              style={[styles.chip, active && styles.chipActive]}
+              style={[
+                styles.chip,
+                {
+                  paddingHorizontal: compact ? 10 : 12,
+                  paddingVertical: compact ? 7 : 8,
+                },
+                active && styles.chipActive,
+              ]}
             >
               <Ionicons
                 name={getCategoryIcon(category.slug)}
-                size={14}
+                size={chipIconSize}
                 color={active ? '#FFFFFF' : colors.accentDark}
               />
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+              <Text
+                style={[
+                  styles.chipText,
+                  { fontSize: layout.font(13, 0.15, 12, 14) },
+                  active && styles.chipTextActive,
+                ]}
+              >
                 {category.name}
               </Text>
             </Pressable>
@@ -232,7 +282,7 @@ export default function MapTabScreen() {
         })}
       </ScrollView>
 
-      <View style={styles.mapCard}>
+      <View style={[styles.mapCard, { borderRadius: compact ? 18 : 24 }]}>
         <WebView
           originWhitelist={['*']}
           source={{ html }}
@@ -257,7 +307,16 @@ export default function MapTabScreen() {
 
         <Pressable
           onPress={() => void resolveDeviceLocation({ forceCenter: true })}
-          style={styles.locateButton}
+          style={[
+            styles.locateButton,
+            {
+              top: compact ? 8 : 12,
+              right: compact ? 8 : 12,
+              width: locateButtonSize,
+              height: locateButtonSize,
+              borderRadius: compact ? 12 : 14,
+            },
+          ]}
         >
           {isLocating ? (
             <ActivityIndicator color={colors.accentDark} size="small" />
@@ -267,9 +326,30 @@ export default function MapTabScreen() {
         </Pressable>
 
         {selectedWorkshop ? (
-          <View style={styles.previewOverlay}>
-            <View style={styles.previewRow}>
-              <View style={styles.previewThumb}>
+          <View
+            style={[
+              styles.previewOverlay,
+              {
+                left: compact ? 8 : 12,
+                right: compact ? 8 : 12,
+                bottom: compact ? 8 : 12,
+                padding: compact ? 10 : 12,
+                gap: compact ? 10 : 12,
+                borderRadius: compact ? 18 : 22,
+              },
+            ]}
+          >
+            <View style={[styles.previewRow, { gap: compact ? 10 : 12 }]}>
+              <View
+                style={[
+                  styles.previewThumb,
+                  {
+                    width: previewThumbSize,
+                    height: previewThumbSize,
+                    borderRadius: compact ? 14 : 18,
+                  },
+                ]}
+              >
                 {selectedWorkshop.photos[0] ? (
                   <Image
                     source={{ uri: selectedWorkshop.photos[0].url }}
@@ -283,7 +363,10 @@ export default function MapTabScreen() {
               </View>
 
               <View style={styles.previewCopy}>
-                <Text numberOfLines={1} style={styles.previewTitle}>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.previewTitle, { fontSize: layout.font(17, 0.2, 15, 18) }]}
+                >
                   {selectedWorkshop.title}
                 </Text>
                 <Text numberOfLines={2} style={styles.previewSubtitle}>
@@ -305,7 +388,13 @@ export default function MapTabScreen() {
 
             <Pressable
               onPress={() => router.push(`/workshop/${selectedWorkshop.id}`)}
-              style={styles.primaryButton}
+              style={[
+                styles.primaryButton,
+                {
+                  paddingVertical: compact ? 12 : 14,
+                  borderRadius: compact ? 15 : 18,
+                },
+              ]}
             >
               <Text style={styles.primaryText}>Открыть объявление</Text>
             </Pressable>

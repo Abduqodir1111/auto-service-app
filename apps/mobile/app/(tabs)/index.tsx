@@ -14,7 +14,6 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { ServiceCategory, UserRole, WorkshopSummary } from '@stomvp/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +28,7 @@ import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
 import { type Coordinates, getDeviceCoordinates } from '../../src/utils/device-location';
 import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
+import { useResponsive } from '../../src/utils/responsive';
 
 // Tashkent center as a sensible default before we know where the user is.
 const TASHKENT_CENTER: Coordinates = {
@@ -52,7 +52,7 @@ export default function CatalogScreen() {
   const searchAnimation = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef<TextInput>(null);
   const filterRailRef = useRef<ScrollView>(null);
-  const { width } = useWindowDimensions();
+  const layout = useResponsive();
   const insets = useSafeAreaInsets();
   const role = useAuthStore((state) => state.session?.user.role);
 
@@ -136,11 +136,15 @@ export default function CatalogScreen() {
   });
 
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
-  const expandedSearchWidth = Math.min(width - 32, 420);
-  const topSpacing = Math.max(insets.top - 28, 6);
+  const searchButtonSize = layout.isSmallPhone ? 44 : 48;
+  const expandedSearchWidth = Math.min(layout.contentWidth, layout.isTablet ? 480 : 420);
+  const topSpacing = Math.max(insets.top - layout.verticalScale(28), layout.isSmallPhone ? 2 : 6);
+  const filterCardWidth = layout.isSmallPhone ? 88 : layout.isTablet ? 112 : 96;
+  const filterCardHeight = layout.isSmallPhone ? 96 : layout.isTablet ? 118 : 108;
+  const filterIconSize = layout.isSmallPhone ? 40 : 46;
   const searchWidth = searchAnimation.interpolate({
     inputRange: [0, 1],
-    outputRange: [48, expandedSearchWidth],
+    outputRange: [searchButtonSize, expandedSearchWidth],
   });
 
   useEffect(() => {
@@ -183,17 +187,33 @@ export default function CatalogScreen() {
     <Screen
       scroll={false}
       edges={['left', 'right', 'bottom']}
-      style={[styles.screenContent, { paddingTop: topSpacing }]}
+      style={[
+        styles.screenContent,
+        {
+          paddingTop: topSpacing,
+          paddingHorizontal: layout.gutter,
+          gap: layout.isSmallPhone ? 10 : 12,
+        },
+      ]}
     >
       <View style={styles.stickyHead}>
         <View style={styles.toolbar}>
-          <Animated.View style={[styles.searchShell, { width: searchWidth }]}>
+          <Animated.View
+            style={[
+              styles.searchShell,
+              {
+                width: searchWidth,
+                height: searchButtonSize,
+                borderRadius: searchButtonSize / 2,
+              },
+            ]}
+          >
             {searchExpanded ? (
               <TextInput
                 ref={searchInputRef}
                 placeholder="Поиск сервисов"
                 placeholderTextColor={colors.muted}
-                style={styles.searchInput}
+                style={[styles.searchInput, { fontSize: layout.font(15, 0.25, 14, 16) }]}
                 value={search}
                 onChangeText={setSearch}
                 returnKeyType="search"
@@ -202,11 +222,11 @@ export default function CatalogScreen() {
             ) : null}
             <Pressable
               onPress={searchExpanded ? closeSearch : () => setSearchExpanded(true)}
-              style={styles.searchButton}
+              style={[styles.searchButton, { width: searchButtonSize, height: searchButtonSize }]}
             >
               <Ionicons
                 name={searchExpanded ? 'close' : 'search'}
-                size={20}
+                size={layout.isSmallPhone ? 19 : 20}
                 color={searchExpanded ? colors.accentDark : colors.text}
               />
             </Pressable>
@@ -220,34 +240,58 @@ export default function CatalogScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filterRailWrap}
-          contentContainerStyle={styles.filterRail}
-        >
-        <Pressable
-          onPress={() => setCategoryId(undefined)}
-          style={[
-            styles.filterCard,
-            styles.filterCardAll,
-            !categoryId && styles.filterCardSelected,
-            !categoryId && styles.filterCardActive,
+          contentContainerStyle={[
+            styles.filterRail,
+            {
+              gap: layout.isSmallPhone ? 8 : 10,
+              paddingRight: layout.gutter,
+            },
           ]}
         >
-          <View
+          <Pressable
+            onPress={() => setCategoryId(undefined)}
             style={[
-              styles.filterIconWrap,
-              styles.filterIconWrapWarm,
-              !categoryId && styles.filterIconWrapActive,
+              styles.filterCard,
+              {
+                width: filterCardWidth,
+                height: filterCardHeight,
+                borderRadius: layout.isSmallPhone ? 20 : 22,
+                paddingVertical: layout.isSmallPhone ? 12 : 14,
+                gap: layout.isSmallPhone ? 8 : 10,
+              },
+              styles.filterCardAll,
+              !categoryId && styles.filterCardSelected,
+              !categoryId && styles.filterCardActive,
             ]}
           >
-            <Ionicons
-              name="grid-outline"
-              size={24}
-              color={!categoryId ? '#FFFFFF' : colors.accentDark}
-            />
-          </View>
-          <Text style={[styles.filterTitle, !categoryId && styles.filterTitleActive]}>
-            Все услуги
-          </Text>
-        </Pressable>
+            <View
+              style={[
+                styles.filterIconWrap,
+                {
+                  width: filterIconSize,
+                  height: filterIconSize,
+                  borderRadius: filterIconSize / 2,
+                },
+                styles.filterIconWrapWarm,
+                !categoryId && styles.filterIconWrapActive,
+              ]}
+            >
+              <Ionicons
+                name="grid-outline"
+                size={layout.isSmallPhone ? 21 : 24}
+                color={!categoryId ? '#FFFFFF' : colors.accentDark}
+              />
+            </View>
+            <Text
+              style={[
+                styles.filterTitle,
+                { fontSize: layout.font(12, 0.2, 11, 13) },
+                !categoryId && styles.filterTitleActive,
+              ]}
+            >
+              Все услуги
+            </Text>
+          </Pressable>
 
           {categories.map((category, index) => {
             const palette = filterPalettes[index % filterPalettes.length];
@@ -260,6 +304,11 @@ export default function CatalogScreen() {
                 style={[
                   styles.filterCard,
                   {
+                    width: filterCardWidth,
+                    height: filterCardHeight,
+                    borderRadius: layout.isSmallPhone ? 20 : 22,
+                    paddingVertical: layout.isSmallPhone ? 12 : 14,
+                    gap: layout.isSmallPhone ? 8 : 10,
                     backgroundColor: active ? colors.accent : palette.background,
                     borderColor: active ? colors.accent : palette.border,
                   },
@@ -270,19 +319,26 @@ export default function CatalogScreen() {
                   style={[
                     styles.filterIconWrap,
                     {
+                      width: filterIconSize,
+                      height: filterIconSize,
+                      borderRadius: filterIconSize / 2,
                       backgroundColor: active ? 'rgba(255, 255, 255, 0.18)' : palette.badge,
                     },
                   ]}
                 >
                   <Ionicons
                     name={getCategoryIcon(category.slug)}
-                    size={24}
+                    size={layout.isSmallPhone ? 21 : 24}
                     color={active ? '#FFFFFF' : palette.icon}
                   />
                 </View>
                 <Text
                   numberOfLines={2}
-                  style={[styles.filterTitle, active && styles.filterTitleActive]}
+                  style={[
+                    styles.filterTitle,
+                    { fontSize: layout.font(12, 0.2, 11, 13) },
+                    active && styles.filterTitleActive,
+                  ]}
                 >
                   {category.name}
                 </Text>
@@ -294,7 +350,13 @@ export default function CatalogScreen() {
 
       <ScrollView
         style={styles.listScroll}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          {
+            gap: layout.isSmallPhone ? 12 : 14,
+            paddingBottom: layout.isSmallPhone ? 96 : 120,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
