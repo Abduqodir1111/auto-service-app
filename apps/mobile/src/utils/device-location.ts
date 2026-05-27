@@ -12,10 +12,13 @@ type DeviceLocationResult = {
   permissionDenied: boolean;
 };
 
+function isIosSimulator() {
+  return Platform.OS === 'ios' && Constants.isDevice === false;
+}
+
 function isIosSimulatorSanFrancisco(location: Coordinates) {
   return (
-    Platform.OS === 'ios' &&
-    Constants.isDevice === false &&
+    isIosSimulator() &&
     location.latitude > 37 &&
     location.latitude < 38.5 &&
     location.longitude > -123 &&
@@ -44,6 +47,13 @@ function toCoordinates(location: Location.LocationObject, fallback: Coordinates 
 export async function getDeviceCoordinates(
   fallback: Coordinates | null,
 ): Promise<DeviceLocationResult> {
+  if (fallback && isIosSimulator()) {
+    return {
+      coordinates: fallback,
+      permissionDenied: false,
+    };
+  }
+
   let permission = await Location.getForegroundPermissionsAsync();
 
   if (permission.status !== Location.PermissionStatus.GRANTED) {
