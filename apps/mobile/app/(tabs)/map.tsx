@@ -199,6 +199,7 @@ export default function MapTabScreen() {
   return (
     <Screen
       scroll={false}
+      edges={['top', 'left', 'right']}
       style={[
         styles.screenContent,
         {

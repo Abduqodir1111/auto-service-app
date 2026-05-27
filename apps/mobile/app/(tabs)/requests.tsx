@@ -48,7 +48,11 @@ export default function RequestsScreen() {
   });
 
   return (
-    <Screen refreshing={requestsQuery.isRefetching} onRefresh={() => void requestsQuery.refetch()}>
+    <Screen
+      edges={['top', 'left', 'right']}
+      refreshing={requestsQuery.isRefetching}
+      onRefresh={() => void requestsQuery.refetch()}
+    >
       <Text style={[styles.title, { fontSize: layout.font(28, 0.25, 24, 30) }]}>
         {role === UserRole.MASTER ? 'Заявки от клиентов' : 'Мои обращения'}
       </Text>

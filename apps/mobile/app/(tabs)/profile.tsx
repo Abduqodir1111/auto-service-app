@@ -164,6 +164,7 @@ export default function ProfileScreen() {
 
   return (
     <Screen
+      edges={['top', 'left', 'right']}
       refreshing={workshopsQuery.isRefetching}
       onRefresh={
         session?.user.role === UserRole.MASTER ? () => void workshopsQuery.refetch() : undefined

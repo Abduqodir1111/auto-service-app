@@ -37,7 +37,11 @@ export default function FavoritesScreen() {
   });
 
   return (
-    <Screen refreshing={favoritesQuery.isRefetching} onRefresh={() => void favoritesQuery.refetch()}>
+    <Screen
+      edges={['top', 'left', 'right']}
+      refreshing={favoritesQuery.isRefetching}
+      onRefresh={() => void favoritesQuery.refetch()}
+    >
       <Text style={{ fontSize: 28, fontWeight: '800' }}>Избранное</Text>
       {(favoritesQuery.data ?? []).length ? (
         <View style={{ gap: 14 }}>

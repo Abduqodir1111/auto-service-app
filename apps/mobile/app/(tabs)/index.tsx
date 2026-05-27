@@ -138,10 +138,10 @@ export default function CatalogScreen() {
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
   const searchButtonSize = layout.isSmallPhone ? 44 : 48;
   const expandedSearchWidth = Math.min(layout.contentWidth, layout.isTablet ? 480 : 420);
-  const topSpacing = Math.max(insets.top - layout.verticalScale(28), layout.isSmallPhone ? 2 : 6);
-  const filterCardWidth = layout.isSmallPhone ? 88 : layout.isTablet ? 112 : 96;
-  const filterCardHeight = layout.isSmallPhone ? 96 : layout.isTablet ? 118 : 108;
-  const filterIconSize = layout.isSmallPhone ? 40 : 46;
+  const topSpacing = Math.max(insets.top + (layout.isSmallPhone ? 2 : 6), layout.isSmallPhone ? 20 : 24);
+  const filterCardWidth = layout.isSmallPhone ? 68 : layout.isTablet ? 88 : 74;
+  const filterCardHeight = layout.isSmallPhone ? 68 : layout.isTablet ? 84 : 74;
+  const filterIconSize = layout.isSmallPhone ? 28 : 30;
   const searchWidth = searchAnimation.interpolate({
     inputRange: [0, 1],
     outputRange: [searchButtonSize, expandedSearchWidth],
@@ -186,7 +186,7 @@ export default function CatalogScreen() {
   return (
     <Screen
       scroll={false}
-      edges={['left', 'right', 'bottom']}
+      edges={['left', 'right']}
       style={[
         styles.screenContent,
         {
@@ -243,7 +243,7 @@ export default function CatalogScreen() {
           contentContainerStyle={[
             styles.filterRail,
             {
-              gap: layout.isSmallPhone ? 8 : 10,
+              gap: layout.isSmallPhone ? 5 : 6,
               paddingRight: layout.gutter,
             },
           ]}
@@ -255,9 +255,9 @@ export default function CatalogScreen() {
               {
                 width: filterCardWidth,
                 height: filterCardHeight,
-                borderRadius: layout.isSmallPhone ? 20 : 22,
-                paddingVertical: layout.isSmallPhone ? 12 : 14,
-                gap: layout.isSmallPhone ? 8 : 10,
+                borderRadius: layout.isSmallPhone ? 17 : 19,
+                paddingVertical: layout.isSmallPhone ? 6 : 7,
+                gap: layout.isSmallPhone ? 4 : 5,
               },
               styles.filterCardAll,
               !categoryId && styles.filterCardSelected,
@@ -278,14 +278,14 @@ export default function CatalogScreen() {
             >
               <Ionicons
                 name="grid-outline"
-                size={layout.isSmallPhone ? 21 : 24}
+                size={layout.isSmallPhone ? 15 : 16}
                 color={!categoryId ? '#FFFFFF' : colors.accentDark}
               />
             </View>
             <Text
               style={[
                 styles.filterTitle,
-                { fontSize: layout.font(12, 0.2, 11, 13) },
+                { fontSize: layout.font(10, 0.12, 9, 11), lineHeight: layout.isSmallPhone ? 11 : 12 },
                 !categoryId && styles.filterTitleActive,
               ]}
             >
@@ -306,9 +306,9 @@ export default function CatalogScreen() {
                   {
                     width: filterCardWidth,
                     height: filterCardHeight,
-                    borderRadius: layout.isSmallPhone ? 20 : 22,
-                    paddingVertical: layout.isSmallPhone ? 12 : 14,
-                    gap: layout.isSmallPhone ? 8 : 10,
+                    borderRadius: layout.isSmallPhone ? 17 : 19,
+                    paddingVertical: layout.isSmallPhone ? 6 : 7,
+                    gap: layout.isSmallPhone ? 4 : 5,
                     backgroundColor: active ? colors.accent : palette.background,
                     borderColor: active ? colors.accent : palette.border,
                   },
@@ -328,7 +328,7 @@ export default function CatalogScreen() {
                 >
                   <Ionicons
                     name={getCategoryIcon(category.slug)}
-                    size={layout.isSmallPhone ? 21 : 24}
+                    size={layout.isSmallPhone ? 15 : 16}
                     color={active ? '#FFFFFF' : palette.icon}
                   />
                 </View>
@@ -336,7 +336,7 @@ export default function CatalogScreen() {
                   numberOfLines={2}
                   style={[
                     styles.filterTitle,
-                    { fontSize: layout.font(12, 0.2, 11, 13) },
+                    { fontSize: layout.font(10, 0.12, 9, 11), lineHeight: layout.isSmallPhone ? 11 : 12 },
                     active && styles.filterTitleActive,
                   ]}
                 >
@@ -354,7 +354,7 @@ export default function CatalogScreen() {
           styles.list,
           {
             gap: layout.isSmallPhone ? 12 : 14,
-            paddingBottom: layout.isSmallPhone ? 96 : 120,
+            paddingBottom: 0,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -457,26 +457,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterRail: {
-    gap: 10,
+    gap: 6,
     paddingRight: 16,
-    paddingVertical: 4,
+    paddingVertical: 0,
   },
   filterCard: {
-    width: 96,
-    height: 108,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    borderRadius: 22,
+    width: 74,
+    height: 74,
+    paddingVertical: 7,
+    paddingHorizontal: 7,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 5,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: '#1A1410',
     shadowOpacity: 0.07,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
     elevation: 2,
   },
   filterCardAll: {
@@ -488,15 +488,15 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   filterCardActive: {
-    transform: [{ translateY: -2 }],
+    transform: [{ translateY: -1 }],
     shadowOpacity: 0.18,
-    shadowRadius: 18,
+    shadowRadius: 14,
     elevation: 6,
   },
   filterIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -509,10 +509,10 @@ const styles = StyleSheet.create({
   filterTitle: {
     color: colors.text,
     fontWeight: '700',
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 12,
     textAlign: 'center',
-    letterSpacing: 0.1,
+    letterSpacing: 0,
   },
   filterTitleActive: {
     color: '#FFFFFF',
