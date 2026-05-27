@@ -15,7 +15,7 @@ import { RedisService } from '../redis/redis.service';
 import { TelegramClient } from '../telegram/telegram.client';
 import { formatUzPhoneForSms, formatUzPhoneForStorage } from './auth.utils';
 
-type PendingSignUpCode = {
+type PendingSmsCode = {
   phone: string;
   codeHash: string;
   expiresAt: string;
@@ -23,9 +23,17 @@ type PendingSignUpCode = {
   attemptsLeft: number;
 };
 
-type VerifiedSignUpPhone = {
+type PendingSignUpCode = PendingSmsCode;
+type PendingPasswordResetCode = PendingSmsCode & {
+  canReset: boolean;
+};
+
+type VerifiedPhone = {
   phone: string;
 };
+
+type VerifiedSignUpPhone = VerifiedPhone;
+type VerifiedPasswordResetPhone = VerifiedPhone;
 
 @Injectable()
 export class SmsAuthService {
@@ -186,10 +194,141 @@ export class SmsAuthService {
     return normalizedPhone;
   }
 
+  async requestPasswordResetCode(phone: string, shouldSend: boolean) {
+    const normalizedPhone = formatUzPhoneForStorage(phone);
+    const smsPhone = formatUzPhoneForSms(phone);
+    const key = this.getPasswordResetCodeKey(normalizedPhone);
+    const existingCode = await this.redisService.getJson<PendingPasswordResetCode>(key);
+    const now = Date.now();
+
+    if (existingCode) {
+      const resendAt = new Date(existingCode.resendAvailableAt).getTime();
+
+      if (resendAt > now) {
+        throw new HttpException(
+          `Повторный код можно запросить через ${Math.ceil((resendAt - now) / 1000)} сек.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
+    const isReviewBypass = normalizedPhone === SmsAuthService.REVIEW_BYPASS_PHONE;
+    const code = isReviewBypass
+      ? SmsAuthService.REVIEW_BYPASS_CODE
+      : this.generateCode();
+
+    if (!isReviewBypass && shouldSend) {
+      await this.sendPasswordResetOtpSms(smsPhone, code);
+    }
+
+    // Unknown or blocked phones get the same success and resend behavior,
+    // but their code cannot be used to reset an account.
+    const payload: PendingPasswordResetCode = {
+      phone: normalizedPhone,
+      codeHash: this.hashCode(normalizedPhone, code),
+      expiresAt: new Date(now + this.otpTtlSeconds * 1000).toISOString(),
+      resendAvailableAt: new Date(now + this.resendSeconds * 1000).toISOString(),
+      attemptsLeft: this.maxAttempts,
+      canReset: shouldSend || isReviewBypass,
+    };
+
+    await this.redisService.setJson(key, payload, this.otpTtlSeconds);
+
+    return {
+      success: true,
+      expiresIn: this.otpTtlSeconds,
+      resendIn: this.resendSeconds,
+    };
+  }
+
+  async verifyPasswordResetCode(phone: string, code: string) {
+    const normalizedPhone = formatUzPhoneForStorage(phone);
+    const key = this.getPasswordResetCodeKey(normalizedPhone);
+    const pending = await this.redisService.getJson<PendingPasswordResetCode>(key);
+
+    if (!pending) {
+      throw new BadRequestException('Код истёк. Запросите новый SMS-код.');
+    }
+
+    if (pending.phone !== normalizedPhone) {
+      throw new BadRequestException('Телефон для подтверждения не совпадает');
+    }
+
+    const expectedHash = this.hashCode(normalizedPhone, code);
+
+    if (pending.codeHash !== expectedHash) {
+      const attemptsLeft = pending.attemptsLeft - 1;
+
+      if (attemptsLeft <= 0) {
+        await this.redisService.delete(key);
+        throw new BadRequestException('Код введён неверно слишком много раз. Запросите новый.');
+      }
+
+      await this.redisService.setJson(
+        key,
+        {
+          ...pending,
+          attemptsLeft,
+        },
+        Math.max(1, Math.ceil((new Date(pending.expiresAt).getTime() - Date.now()) / 1000)),
+      );
+
+      throw new BadRequestException(
+        `Неверный код. Осталось попыток: ${attemptsLeft}.`,
+      );
+    }
+
+    await this.redisService.delete(key);
+
+    if (!pending.canReset) {
+      throw new BadRequestException('Код истёк. Запросите новый SMS-код.');
+    }
+
+    const verificationToken = randomUUID();
+    await this.redisService.setJson(
+      this.getVerifiedPasswordResetKey(verificationToken),
+      {
+        phone: normalizedPhone,
+      } satisfies VerifiedPasswordResetPhone,
+      15 * 60,
+    );
+
+    return {
+      verificationToken,
+      expiresIn: 15 * 60,
+    };
+  }
+
+  async consumeVerifiedPasswordReset(phone: string, verificationToken: string) {
+    const normalizedPhone = formatUzPhoneForStorage(phone);
+    const key = this.getVerifiedPasswordResetKey(verificationToken);
+    const payload = await this.redisService.getJson<VerifiedPasswordResetPhone>(key);
+
+    if (!payload) {
+      throw new BadRequestException('Подтверждение телефона истекло. Подтвердите номер ещё раз.');
+    }
+
+    if (payload.phone !== normalizedPhone) {
+      throw new BadRequestException('Подтверждение относится к другому номеру телефона.');
+    }
+
+    await this.redisService.delete(key);
+
+    return normalizedPhone;
+  }
+
   private async sendRegistrationOtpSms(phone: string, code: string) {
+    return this.sendOtpSms(phone, code, 'Registration');
+  }
+
+  private async sendPasswordResetOtpSms(phone: string, code: string) {
+    return this.sendOtpSms(phone, code, 'Password reset');
+  }
+
+  private async sendOtpSms(phone: string, code: string, contextLabel: string) {
     if (!this.providerToken) {
       if (this.configService.get<string>('NODE_ENV') !== 'production') {
-        console.log(`[DevSMS disabled] Registration OTP for ${phone}: ${code}`);
+        console.log(`[DevSMS disabled] ${contextLabel} OTP for ${phone}: ${code}`);
         return;
       }
 
@@ -318,6 +457,14 @@ export class SmsAuthService {
 
   private getVerifiedPhoneKey(token: string) {
     return `auth:sms:signup:verified:${token}`;
+  }
+
+  private getPasswordResetCodeKey(phone: string) {
+    return `auth:sms:password-reset:code:${phone}`;
+  }
+
+  private getVerifiedPasswordResetKey(token: string) {
+    return `auth:sms:password-reset:verified:${token}`;
   }
 
   private generateCode() {

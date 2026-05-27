@@ -6,9 +6,12 @@ import { CurrentUser, JwtUser } from '../common/decorators/current-user.decorato
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RequestPasswordResetCodeDto } from './dto/request-password-reset-code.dto';
 import { RequestSignUpCodeDto } from './dto/request-sign-up-code.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignInDto } from './dto/sign-in.dto';
 import { SignUpDto } from './dto/sign-up.dto';
+import { VerifyPasswordResetCodeDto } from './dto/verify-password-reset-code.dto';
 import { VerifySignUpCodeDto } from './dto/verify-sign-up-code.dto';
 
 @ApiTags('auth')
@@ -28,6 +31,22 @@ export class AuthController {
   @Post('register/verify-code')
   verifySignUpCode(@Body() dto: VerifySignUpCodeDto) {
     return this.authService.verifySignUpCode(dto);
+  }
+
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('password-reset/request-code')
+  requestPasswordResetCode(@Body() dto: RequestPasswordResetCodeDto) {
+    return this.authService.requestPasswordResetCode(dto);
+  }
+
+  @Post('password-reset/verify-code')
+  verifyPasswordResetCode(@Body() dto: VerifyPasswordResetCodeDto) {
+    return this.authService.verifyPasswordResetCode(dto);
+  }
+
+  @Post('password-reset/confirm')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   @Post('register')

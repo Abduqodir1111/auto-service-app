@@ -141,6 +141,13 @@ export default function SignInScreen() {
           )}
         />
 
+        <Pressable
+          onPress={() => router.push('/(auth)/forgot-password')}
+          style={styles.forgotButton}
+        >
+          <Text style={styles.forgotText}>Забыли пароль?</Text>
+        </Pressable>
+
         {loginErrorMessage ? (
           <Text style={styles.error}>{loginErrorMessage}</Text>
         ) : null}
@@ -285,6 +292,16 @@ const styles = StyleSheet.create({
   },
   btnIcon: {
     marginRight: 8,
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  forgotText: {
+    color: colors.accentDark,
+    fontSize: 13,
+    fontWeight: '800',
   },
   buttonPressed: { opacity: 0.88 },
   buttonDisabled: { opacity: 0.5 },

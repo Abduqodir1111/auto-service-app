@@ -25,6 +25,7 @@ function shouldSkipRefresh(url?: string) {
     '/auth/logout',
     '/auth/refresh',
     '/auth/register',
+    '/auth/password-reset',
   ].some((path) => url.includes(path));
 }
 

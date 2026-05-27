@@ -19,10 +19,13 @@ import { PrismaService } from '../database/prisma.service';
 import { REDIS } from '../redis/redis.constants';
 import { UsersService } from '../users/users.service';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RequestPasswordResetCodeDto } from './dto/request-password-reset-code.dto';
 import { SignInDto } from './dto/sign-in.dto';
 import { SignUpDto } from './dto/sign-up.dto';
 import { RequestSignUpCodeDto } from './dto/request-sign-up-code.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifySignUpCodeDto } from './dto/verify-sign-up-code.dto';
+import { VerifyPasswordResetCodeDto } from './dto/verify-password-reset-code.dto';
 import { formatUzPhoneForStorage } from './auth.utils';
 import { SmsAuthService } from './sms-auth.service';
 
@@ -70,6 +73,61 @@ export class AuthService {
 
   async verifySignUpCode(dto: VerifySignUpCodeDto) {
     return this.smsAuthService.verifySignUpCode(dto.phone, dto.code);
+  }
+
+  async requestPasswordResetCode(dto: RequestPasswordResetCodeDto) {
+    const normalizedPhone = formatUzPhoneForStorage(dto.phone);
+    const user = await this.prisma.user.findUnique({
+      where: { phone: normalizedPhone },
+      select: { id: true, isBlocked: true },
+    });
+
+    return this.smsAuthService.requestPasswordResetCode(
+      normalizedPhone,
+      Boolean(user && !user.isBlocked),
+    );
+  }
+
+  async verifyPasswordResetCode(dto: VerifyPasswordResetCodeDto) {
+    return this.smsAuthService.verifyPasswordResetCode(dto.phone, dto.code);
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const normalizedPhone = await this.smsAuthService.consumeVerifiedPasswordReset(
+      dto.phone,
+      dto.verificationToken,
+    );
+
+    const user = await this.prisma.user.findUnique({
+      where: { phone: normalizedPhone },
+      select: { id: true, isBlocked: true },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Аккаунт не найден. Запросите SMS-код ещё раз.');
+    }
+
+    if (user.isBlocked) {
+      throw new UnauthorizedException('Account is blocked');
+    }
+
+    const passwordHash = await hash(dto.newPassword, 10);
+    const revokedAt = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      }),
+      this.prisma.refreshSession.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt },
+      }),
+    ]);
+
+    await this.redis.del(LOGIN_FAIL_KEY(normalizedPhone), LOGIN_LOCK_KEY(normalizedPhone));
+
+    return { success: true };
   }
 
   async register(dto: SignUpDto, request?: Request) {
