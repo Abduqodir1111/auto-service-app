@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { AppLogo } from '../components/app-logo';
+import appIconUrl from '../assets/app-icon.png';
 import { useAuth } from '../features/auth/auth-provider';
 
 const schema = z.object({
@@ -47,22 +47,18 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
-      <section className="login-card panel">
-        <div>
-          <AppLogo />
-          <p className="eyebrow">MasterTop</p>
-          <h1>Админ-панель сервиса для СТО</h1>
-          <p className="muted">
-            Войдите с администраторскими данными из базы.
-          </p>
+      <section className="login-card login-card--modern" aria-label="Вход в админ-панель">
+        <div className="login-card__brand">
+          <img className="login-card__icon" src={appIconUrl} alt="MasterTop" />
         </div>
 
         <form className="form" autoComplete="off" onSubmit={onSubmit}>
           <label className="field">
-            <span>Телефон</span>
+            <span>Логин</span>
             <input
               type="tel"
               inputMode="tel"
+              placeholder="Логин"
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="none"
@@ -76,6 +72,7 @@ export function LoginPage() {
             <span>Пароль</span>
             <input
               type="password"
+              placeholder="Пароль"
               autoComplete="new-password"
               autoCorrect="off"
               autoCapitalize="none"

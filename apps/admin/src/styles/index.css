@@ -243,6 +243,8 @@ img {
 
 .field input,
 .field textarea {
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 12px 14px;
@@ -437,6 +439,9 @@ img {
   display: grid;
   place-items: center;
   padding: 24px;
+  background:
+    linear-gradient(145deg, rgba(255, 249, 241, 0.96), rgba(237, 249, 246, 0.92) 46%, rgba(246, 249, 255, 0.96)),
+    var(--bg);
 }
 
 .public-page {
@@ -501,6 +506,73 @@ img {
   width: min(520px, 100%);
   display: grid;
   gap: 20px;
+}
+
+.login-card--modern {
+  width: min(420px, 100%);
+  padding: 34px;
+  gap: 26px;
+  border: 1px solid rgba(23, 33, 32, 0.1);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 24px 70px rgba(35, 53, 49, 0.14);
+}
+
+.login-card__brand {
+  display: grid;
+  place-items: center;
+}
+
+.login-card__icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 28px;
+  box-shadow: 0 18px 38px rgba(214, 108, 47, 0.22);
+}
+
+.login-card--modern .form {
+  gap: 16px;
+}
+
+.login-card--modern .field {
+  gap: 7px;
+}
+
+.login-card--modern .field span {
+  color: #243936;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.login-card--modern .field input {
+  min-height: 52px;
+  border-radius: 18px;
+  border-color: rgba(23, 33, 32, 0.12);
+  background: #fbfbf9;
+  padding: 14px 16px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.login-card--modern .field input:focus {
+  border-color: rgba(14, 122, 97, 0.72);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(14, 122, 97, 0.12);
+}
+
+.login-card--modern .button {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 4px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #0e7a61, #d66c2f);
+  font-weight: 800;
+  box-shadow: 0 16px 34px rgba(14, 122, 97, 0.18);
+}
+
+.login-card--modern .alert {
+  border: 1px solid rgba(200, 79, 60, 0.18);
 }
 
 .alert {
@@ -640,7 +712,7 @@ img {
   .login-page {
     align-items: start;
     place-items: start stretch;
-    padding: 14px;
+    padding: 18px;
   }
 
   .login-card,
@@ -651,6 +723,20 @@ img {
   .report-card {
     border-radius: 20px;
     padding: 16px;
+  }
+
+  .login-card--modern {
+    width: 100%;
+    align-self: start;
+    justify-self: center;
+    margin-top: min(12vh, 72px);
+    padding: 26px 18px;
+  }
+
+  .login-card__icon {
+    width: 84px;
+    height: 84px;
+    border-radius: 24px;
   }
 }
 
