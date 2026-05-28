@@ -1,4 +1,6 @@
 import axios from 'axios';
+import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,6 +46,18 @@ function getApiErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function getAppVersionLabel() {
+  const version = Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? 'dev';
+  const expoBuildNumber =
+    Constants.expoConfig?.ios?.buildNumber ??
+    (Constants.expoConfig?.android?.versionCode != null
+      ? String(Constants.expoConfig.android.versionCode)
+      : null);
+  const build = Application.nativeBuildVersion ?? expoBuildNumber;
+
+  return build ? `Версия ${version} (${build})` : `Версия ${version}`;
 }
 
 export default function ProfileScreen() {
@@ -138,6 +152,7 @@ export default function ProfileScreen() {
     },
   });
   const workshops = workshopsQuery.data ?? [];
+  const appVersionLabel = getAppVersionLabel();
 
   return (
     <Screen
@@ -416,6 +431,10 @@ export default function ProfileScreen() {
       >
         <Text style={styles.secondaryText}>Выйти</Text>
       </Pressable>
+
+      <View style={styles.versionFooter}>
+        <Text style={styles.versionText}>{appVersionLabel}</Text>
+      </View>
     </Screen>
   );
 }
@@ -655,5 +674,15 @@ const styles = StyleSheet.create({
   settingsTitle: {
     color: colors.text,
     fontWeight: '800',
+  },
+  versionFooter: {
+    alignItems: 'center',
+    paddingTop: 4,
+    paddingBottom: 14,
+  },
+  versionText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

@@ -3,7 +3,7 @@
     "name": "MasterTop",
     "slug": "mastertop",
     "scheme": "mastertop",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.abduqodir.stomvp",
-      "buildNumber": "11",
+      "buildNumber": "12",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "uz.nedvigagregat.mastertop",
-      "versionCode": 14,
+      "versionCode": 15,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
