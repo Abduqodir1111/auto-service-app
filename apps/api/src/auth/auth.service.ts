@@ -26,6 +26,7 @@ import { RequestSignUpCodeDto } from './dto/request-sign-up-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifySignUpCodeDto } from './dto/verify-sign-up-code.dto';
 import { VerifyPasswordResetCodeDto } from './dto/verify-password-reset-code.dto';
+import { ConfirmAccountDeleteDto } from './dto/confirm-account-delete.dto';
 import { formatUzPhoneForStorage } from './auth.utils';
 import { SmsAuthService } from './sms-auth.service';
 
@@ -128,6 +129,27 @@ export class AuthService {
     await this.redis.del(LOGIN_FAIL_KEY(normalizedPhone), LOGIN_LOCK_KEY(normalizedPhone));
 
     return { success: true };
+  }
+
+  async requestAccountDeletionCode(userId: string) {
+    const user = await this.usersService.getByIdOrThrow(userId);
+
+    if (user.isBlocked) {
+      throw new UnauthorizedException('Account is blocked');
+    }
+
+    return this.smsAuthService.requestAccountDeletionCode(user.phone);
+  }
+
+  async confirmAccountDeletion(userId: string, dto: ConfirmAccountDeleteDto) {
+    const user = await this.usersService.getByIdOrThrow(userId);
+
+    if (user.isBlocked) {
+      throw new UnauthorizedException('Account is blocked');
+    }
+
+    await this.smsAuthService.verifyAccountDeletionCode(user.phone, dto.code);
+    return this.usersService.deleteAccount(userId);
   }
 
   async register(dto: SignUpDto, request?: Request) {

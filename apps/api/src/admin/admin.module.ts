@@ -5,6 +5,7 @@ import { UploadsModule } from '../uploads/uploads.module';
 import { WorkshopsModule } from '../workshops/workshops.module';
 import { ReportsModule } from '../reports/reports.module';
 import { TesterMonitorModule } from '../tester-monitor/tester-monitor.module';
+import { SupportModule } from '../support/support.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -16,6 +17,7 @@ import { AdminService } from './admin.service';
     ApplicationsModule,
     ReportsModule,
     TesterMonitorModule,
+    SupportModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

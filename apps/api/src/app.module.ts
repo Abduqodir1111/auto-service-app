@@ -22,6 +22,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { ServiceCallsModule } from './service-calls/service-calls.module';
 import { TesterMonitorModule } from './tester-monitor/tester-monitor.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { TelegramModule } from './telegram/telegram.module';
     AnalyticsModule,
     ServiceCallsModule,
     TesterMonitorModule,
+    SupportModule,
   ],
   providers: [
     // SentryGlobalFilter must run BEFORE any other exception filter so it

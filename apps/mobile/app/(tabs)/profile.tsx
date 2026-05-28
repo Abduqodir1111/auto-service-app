@@ -137,29 +137,6 @@ export default function ProfileScreen() {
       Alert.alert('Ошибка', 'Не удалось изменить статус. Попробуйте ещё раз.');
     },
   });
-  const deleteAccountMutation = useMutation({
-    mutationFn: async () => {
-      await api.delete('/users/me');
-    },
-    onSuccess: async () => {
-      queryClient.clear();
-      await setSession(null);
-      router.replace('/(auth)/sign-in');
-      Alert.alert(
-        'Аккаунт удалён',
-        'Ваш аккаунт и связанные с ним данные удалены с сервера.',
-      );
-    },
-    onError: (error) => {
-      Alert.alert(
-        'Не удалось удалить аккаунт',
-        getApiErrorMessage(
-          error,
-          'Попробуйте ещё раз. Если проблема повторится, проверьте подключение к серверу.',
-        ),
-      );
-    },
-  });
   const workshops = workshopsQuery.data ?? [];
 
   return (
@@ -392,37 +369,34 @@ export default function ProfileScreen() {
         </>
       ) : null}
 
-      <View style={[styles.card, cardAdaptiveStyle, styles.accountDangerCard]}>
-        <Text style={styles.sectionTitle}>Удаление аккаунта</Text>
-        <Text style={styles.muted}>
-          Вы можете полностью удалить аккаунт. Профиль, объявления, фото, заявки,
-          отзывы и избранное будут удалены с сервера без возможности восстановления.
-        </Text>
+      <View style={[styles.card, cardAdaptiveStyle]}>
+        <Text style={styles.sectionTitle}>Настройки</Text>
         <Pressable
-          disabled={deleteAccountMutation.isPending}
-          onPress={() =>
-            Alert.alert(
-              'Удалить аккаунт навсегда?',
-              'Это действие нельзя отменить. Все данные аккаунта будут удалены с сервера.',
-              [
-                { text: 'Отмена', style: 'cancel' },
-                {
-                  text: 'Удалить аккаунт',
-                  style: 'destructive',
-                  onPress: () => deleteAccountMutation.mutate(),
-                },
-              ],
-            )
-          }
-          style={[
-            styles.deleteAccountButton,
-            { borderRadius: compact ? 15 : 18, paddingVertical: compact ? 12 : 14 },
-            deleteAccountMutation.isPending && styles.disabledButton,
-          ]}
+          onPress={() => router.push('/settings/support')}
+          style={styles.settingsRow}
         >
-          <Text style={styles.deleteAccountText}>
-            {deleteAccountMutation.isPending ? 'Удаляем аккаунт...' : 'Удалить аккаунт'}
-          </Text>
+          <View style={styles.settingsIcon}>
+            <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.accentDark} />
+          </View>
+          <View style={styles.settingsCopy}>
+            <Text style={styles.settingsTitle}>Поддержка</Text>
+            <Text style={styles.muted}>Предложения и жалобы администратору</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push('/settings/account')}
+          style={styles.settingsRow}
+        >
+          <View style={styles.settingsIcon}>
+            <Ionicons name="person-circle-outline" size={21} color={colors.accentDark} />
+          </View>
+          <View style={styles.settingsCopy}>
+            <Text style={styles.settingsTitle}>Управление аккаунтом</Text>
+            <Text style={styles.muted}>Удаление аккаунта через SMS-подтверждение</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.muted} />
         </Pressable>
       </View>
 
@@ -641,10 +615,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: colors.success,
   },
-  accountDangerCard: {
-    borderColor: '#F1B3A7',
-    backgroundColor: '#FFF9F6',
-  },
   onlineCard: {
     backgroundColor: '#FFF7F2',
     borderColor: '#F1D1BC',
@@ -662,15 +632,28 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
-  deleteAccountButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 18,
+  settingsRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D75A43',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  deleteAccountText: {
-    color: 'white',
+  settingsIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF0E5',
+  },
+  settingsCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  settingsTitle: {
+    color: colors.text,
     fontWeight: '800',
   },
 });

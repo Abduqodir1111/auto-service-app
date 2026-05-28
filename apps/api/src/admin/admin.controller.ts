@@ -8,6 +8,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UpdateReportStatusDto } from '../reports/dto/update-report-status.dto';
 import { ModerateReviewDto } from '../reviews/dto/moderate-review.dto';
+import { UpdateSupportTicketStatusDto } from '../support/dto/update-support-ticket-status.dto';
 import { ModeratePhotoDto } from '../uploads/dto/moderate-photo.dto';
 import { getRequestOrigin } from '../uploads/uploads.utils';
 import { ModerateWorkshopDto } from '../workshops/dto/moderate-workshop.dto';
@@ -140,6 +141,19 @@ export class AdminController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.adminService.updateReportStatus(id, dto, user.sub);
+  }
+
+  @Get('support-tickets')
+  supportTickets() {
+    return this.adminService.listSupportTickets();
+  }
+
+  @Patch('support-tickets/:id/status')
+  updateSupportTicketStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateSupportTicketStatusDto,
+  ) {
+    return this.adminService.updateSupportTicketStatus(id, dto);
   }
 
   @Get('moderation-history')

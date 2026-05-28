@@ -27,6 +27,7 @@ type PendingSignUpCode = PendingSmsCode;
 type PendingPasswordResetCode = PendingSmsCode & {
   canReset: boolean;
 };
+type PendingAccountDeletionCode = PendingSmsCode;
 
 type VerifiedPhone = {
   phone: string;
@@ -317,12 +318,101 @@ export class SmsAuthService {
     return normalizedPhone;
   }
 
+  async requestAccountDeletionCode(phone: string) {
+    const normalizedPhone = formatUzPhoneForStorage(phone);
+    const smsPhone = formatUzPhoneForSms(phone);
+    const key = this.getAccountDeletionCodeKey(normalizedPhone);
+    const existingCode = await this.redisService.getJson<PendingAccountDeletionCode>(key);
+    const now = Date.now();
+
+    if (existingCode) {
+      const resendAt = new Date(existingCode.resendAvailableAt).getTime();
+
+      if (resendAt > now) {
+        throw new HttpException(
+          `Повторный код можно запросить через ${Math.ceil((resendAt - now) / 1000)} сек.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
+    const isReviewBypass = normalizedPhone === SmsAuthService.REVIEW_BYPASS_PHONE;
+    const code = isReviewBypass
+      ? SmsAuthService.REVIEW_BYPASS_CODE
+      : this.generateCode();
+
+    if (!isReviewBypass) {
+      await this.sendAccountDeletionOtpSms(smsPhone, code);
+    }
+
+    const payload: PendingAccountDeletionCode = {
+      phone: normalizedPhone,
+      codeHash: this.hashCode(normalizedPhone, code),
+      expiresAt: new Date(now + this.otpTtlSeconds * 1000).toISOString(),
+      resendAvailableAt: new Date(now + this.resendSeconds * 1000).toISOString(),
+      attemptsLeft: this.maxAttempts,
+    };
+
+    await this.redisService.setJson(key, payload, this.otpTtlSeconds);
+
+    return {
+      success: true,
+      expiresIn: this.otpTtlSeconds,
+      resendIn: this.resendSeconds,
+    };
+  }
+
+  async verifyAccountDeletionCode(phone: string, code: string) {
+    const normalizedPhone = formatUzPhoneForStorage(phone);
+    const key = this.getAccountDeletionCodeKey(normalizedPhone);
+    const pending = await this.redisService.getJson<PendingAccountDeletionCode>(key);
+
+    if (!pending) {
+      throw new BadRequestException('Код истёк. Запросите новый SMS-код.');
+    }
+
+    if (pending.phone !== normalizedPhone) {
+      throw new BadRequestException('Телефон для подтверждения не совпадает');
+    }
+
+    const expectedHash = this.hashCode(normalizedPhone, code);
+
+    if (pending.codeHash !== expectedHash) {
+      const attemptsLeft = pending.attemptsLeft - 1;
+
+      if (attemptsLeft <= 0) {
+        await this.redisService.delete(key);
+        throw new BadRequestException('Код введён неверно слишком много раз. Запросите новый.');
+      }
+
+      await this.redisService.setJson(
+        key,
+        {
+          ...pending,
+          attemptsLeft,
+        },
+        Math.max(1, Math.ceil((new Date(pending.expiresAt).getTime() - Date.now()) / 1000)),
+      );
+
+      throw new BadRequestException(
+        `Неверный код. Осталось попыток: ${attemptsLeft}.`,
+      );
+    }
+
+    await this.redisService.delete(key);
+    return normalizedPhone;
+  }
+
   private async sendRegistrationOtpSms(phone: string, code: string) {
     return this.sendOtpSms(phone, code, 'Registration');
   }
 
   private async sendPasswordResetOtpSms(phone: string, code: string) {
     return this.sendOtpSms(phone, code, 'Password reset');
+  }
+
+  private async sendAccountDeletionOtpSms(phone: string, code: string) {
+    return this.sendOtpSms(phone, code, 'Account deletion');
   }
 
   private async sendOtpSms(phone: string, code: string, contextLabel: string) {
@@ -465,6 +555,10 @@ export class SmsAuthService {
 
   private getVerifiedPasswordResetKey(token: string) {
     return `auth:sms:password-reset:verified:${token}`;
+  }
+
+  private getAccountDeletionCodeKey(phone: string) {
+    return `auth:sms:account-delete:code:${phone}`;
   }
 
   private generateCode() {

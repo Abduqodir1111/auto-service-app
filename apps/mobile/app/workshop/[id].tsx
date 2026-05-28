@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import axios from 'axios';
-import { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 import { ReportTargetType, UserRole, WorkshopDetails } from '@stomvp/shared';
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
@@ -15,6 +16,7 @@ import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
 import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
 import { openExternalMap } from '../../src/utils/maps';
+import { createLeafletHtml } from '../../src/utils/leaflet-html';
 import { track } from '../../src/utils/analytics';
 import { clamp, useResponsive } from '../../src/utils/responsive';
 
@@ -56,6 +58,7 @@ export default function WorkshopDetailsScreen() {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
   const [reportNotice, setReportNotice] = useState<string | null>(null);
+  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
   const workshopQuery = useQuery({
     queryKey: ['workshop', params.id],
@@ -155,6 +158,19 @@ export default function WorkshopDetailsScreen() {
   const workshop = workshopQuery.data;
   const canReview = session?.user.role === UserRole.CLIENT && session.user.id !== workshop?.ownerId;
   const isFavorite = workshop?.isFavorite ?? false;
+  const hasCoordinates = workshop?.latitude != null && workshop.longitude != null;
+  const locationHtml = useMemo(() => {
+    if (!hasCoordinates || !workshop) {
+      return null;
+    }
+
+    return createLeafletHtml({
+      latitude: workshop.latitude as number,
+      longitude: workshop.longitude as number,
+      title: workshop.title,
+      subtitle: `${workshop.city}, ${workshop.addressLine}`,
+    });
+  }, [hasCoordinates, workshop]);
 
   if (!workshop) {
     return (
@@ -187,7 +203,6 @@ export default function WorkshopDetailsScreen() {
     );
   }
 
-  const hasCoordinates = workshop.latitude != null && workshop.longitude != null;
   const coverPhotos = workshop.photos.length ? workshop.photos : [];
 
   const submitReport = (targetType: ReportTargetType, targetId: string, label: string) => {
@@ -278,17 +293,22 @@ export default function WorkshopDetailsScreen() {
                 },
               ]}
             >
-              <Image
-                source={{ uri: photo.url }}
-                style={[
-                  styles.heroPhoto,
-                  {
-                    width: heroPhotoWidth,
-                    height: heroPhotoHeight,
-                    borderRadius: compact ? 20 : 24,
-                  },
-                ]}
-              />
+              <Pressable
+                onPress={() => setSelectedPhotoUrl(photo.url)}
+                style={styles.heroPhotoOpenButton}
+              >
+                <Image
+                  source={{ uri: photo.url }}
+                  style={[
+                    styles.heroPhoto,
+                    {
+                      width: heroPhotoWidth,
+                      height: heroPhotoHeight,
+                      borderRadius: compact ? 20 : 24,
+                    },
+                  ]}
+                />
+              </Pressable>
               <Pressable
                 disabled={reportMutation.isPending}
                 onPress={() =>
@@ -317,9 +337,46 @@ export default function WorkshopDetailsScreen() {
         )}
       </ScrollView>
 
+      <Modal
+        visible={Boolean(selectedPhotoUrl)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedPhotoUrl(null)}
+      >
+        <View style={styles.photoModal}>
+          <Pressable style={styles.photoModalBackdrop} onPress={() => setSelectedPhotoUrl(null)} />
+          <View style={styles.photoModalContent}>
+            <Pressable
+              onPress={() => setSelectedPhotoUrl(null)}
+              style={styles.photoModalCloseButton}
+            >
+              <Ionicons name="close" size={24} color="#FFFFFF" />
+            </Pressable>
+            {selectedPhotoUrl ? (
+              <Image
+                source={{ uri: selectedPhotoUrl }}
+                style={styles.photoModalImage}
+                resizeMode="contain"
+              />
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
       <View style={[styles.card, cardAdaptiveStyle]}>
         <Text style={styles.description}>{workshop.description}</Text>
-        <Text style={styles.meta}>Контакты: {workshop.phone}</Text>
+        <View style={styles.contactCard}>
+          <View style={styles.contactCopy}>
+            <Text style={styles.contactLabel}>Контакты мастера</Text>
+            <Text style={styles.contactPhone}>{workshop.phone}</Text>
+          </View>
+          <Pressable
+            onPress={() => Linking.openURL(`tel:${workshop.phone}`)}
+            style={styles.phoneIconButton}
+          >
+            <Ionicons name="call" size={22} color="#FFFFFF" />
+          </Pressable>
+        </View>
         <Text style={styles.meta}>График: {workshop.openingHours || 'Уточняйте по телефону'}</Text>
         <Text style={styles.meta}>
           Рейтинг {workshop.averageRating.toFixed(1)} • {workshop.reviewsCount} отзывов
@@ -359,19 +416,43 @@ export default function WorkshopDetailsScreen() {
           {workshop.city}, {workshop.addressLine}
         </Text>
 
-        {hasCoordinates ? (
-          <Pressable
-            onPress={() =>
-              openExternalMap(
-                workshop.latitude as number,
-                workshop.longitude as number,
-                workshop.title,
-              )
-            }
-            style={styles.secondaryButton}
-          >
-            <Text style={styles.secondaryText}>Построить маршрут</Text>
-          </Pressable>
+        {hasCoordinates && locationHtml ? (
+          <>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: '/map/view',
+                  params: {
+                    latitude: String(workshop.latitude),
+                    longitude: String(workshop.longitude),
+                    title: workshop.title,
+                    address: `${workshop.city}, ${workshop.addressLine}`,
+                  },
+                })
+              }
+              style={styles.locationMapPreview}
+            >
+              <WebView
+                pointerEvents="none"
+                originWhitelist={['*']}
+                source={{ html: locationHtml }}
+                style={styles.locationMap}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                openExternalMap(
+                  workshop.latitude as number,
+                  workshop.longitude as number,
+                  workshop.title,
+                )
+              }
+              style={styles.routeButton}
+            >
+              <Ionicons name="navigate" size={18} color="#FFFFFF" />
+              <Text style={styles.primaryText}>Построить маршрут</Text>
+            </Pressable>
+          </>
         ) : (
           <Text style={styles.meta}>Точная точка на карте пока не указана.</Text>
         )}
@@ -395,12 +476,6 @@ export default function WorkshopDetailsScreen() {
       </View>
 
       <View style={[styles.actions, compact && styles.actionsStack]}>
-        <Pressable
-          onPress={() => Linking.openURL(`tel:${workshop.phone}`)}
-          style={styles.primaryButton}
-        >
-          <Text style={styles.primaryText}>Позвонить</Text>
-        </Pressable>
         <Pressable
           disabled={favoriteMutation.isPending}
           onPress={() => favoriteMutation.mutate(!isFavorite)}
@@ -611,6 +686,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: '#FFF1E7',
   },
+  heroPhotoOpenButton: {
+    flex: 1,
+  },
   photoReportButton: {
     position: 'absolute',
     right: 10,
@@ -649,6 +727,40 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: colors.text,
   },
+  contactCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: '#F5FBF8',
+    borderWidth: 1,
+    borderColor: '#CFE7DE',
+  },
+  contactCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  contactLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  contactPhone: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  phoneIconButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.success,
+  },
   meta: {
     color: colors.muted,
   },
@@ -678,6 +790,27 @@ const styles = StyleSheet.create({
   locationChipText: {
     color: colors.accentDark,
     fontWeight: '700',
+  },
+  locationMapPreview: {
+    height: 190,
+    overflow: 'hidden',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#F4EFE7',
+  },
+  locationMap: {
+    flex: 1,
+    backgroundColor: '#F4EFE7',
+  },
+  routeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 18,
+    backgroundColor: colors.success,
   },
   serviceRow: {
     flexDirection: 'row',
@@ -843,5 +976,33 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.55,
+  },
+  photoModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+  },
+  photoModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  photoModalContent: {
+    flex: 1,
+    padding: 18,
+    justifyContent: 'center',
+  },
+  photoModalCloseButton: {
+    position: 'absolute',
+    top: 54,
+    right: 18,
+    zIndex: 2,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  photoModalImage: {
+    width: '100%',
+    height: '100%',
   },
 });

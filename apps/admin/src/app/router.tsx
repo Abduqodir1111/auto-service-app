@@ -12,6 +12,7 @@ import { PrivacyPage } from '../pages/privacy-page';
 import { ReportsPage } from '../pages/reports-page';
 import { ReviewsPage } from '../pages/reviews-page';
 import { SupportPage } from '../pages/support-page';
+import { SupportTicketsPage } from '../pages/support-tickets-page';
 import { TestersActivityPage } from '../pages/testers-activity-page';
 import { UsersPage } from '../pages/users-page';
 import { WorkshopsPage } from '../pages/workshops-page';
@@ -47,6 +48,7 @@ export function AppRouter() {
         <Route path="/reviews" element={<ReviewsPage />} />
         <Route path="/photos" element={<PhotosPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/support-tickets" element={<SupportTicketsPage />} />
         <Route path="/moderation-history" element={<ModerationHistoryPage />} />
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />

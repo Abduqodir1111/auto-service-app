@@ -17,6 +17,8 @@ import { WorkshopsService } from '../workshops/workshops.service';
 import { ModerateReviewDto } from '../reviews/dto/moderate-review.dto';
 import { ModerateWorkshopDto } from '../workshops/dto/moderate-workshop.dto';
 import { TesterMonitorService } from '../tester-monitor/tester-monitor.service';
+import { SupportService } from '../support/support.service';
+import { UpdateSupportTicketStatusDto } from '../support/dto/update-support-ticket-status.dto';
 
 @Injectable()
 export class AdminService {
@@ -28,6 +30,7 @@ export class AdminService {
     private readonly applicationsService: ApplicationsService,
     private readonly reportsService: ReportsService,
     private readonly testerMonitor: TesterMonitorService,
+    private readonly supportService: SupportService,
   ) {}
 
   async markTester(id: string, isTester: boolean) {
@@ -236,6 +239,14 @@ export class AdminService {
 
   async updateReportStatus(id: string, dto: UpdateReportStatusDto, actorId?: string) {
     return this.reportsService.updateStatus(id, dto, actorId);
+  }
+
+  async listSupportTickets() {
+    return this.supportService.listAll();
+  }
+
+  async updateSupportTicketStatus(id: string, dto: UpdateSupportTicketStatusDto) {
+    return this.supportService.updateStatus(id, dto);
   }
 
   async listModerationHistory() {

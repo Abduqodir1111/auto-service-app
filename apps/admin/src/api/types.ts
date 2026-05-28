@@ -7,6 +7,8 @@ import {
   ReportTargetType,
   ReviewStatus,
   ServiceCategory,
+  SupportTicketStatus,
+  SupportTicketType,
   UserRole,
   WorkshopStatus,
 } from '@stomvp/shared';
@@ -178,6 +180,24 @@ export type AdminReport = {
       id: string;
       fullName: string;
     };
+  } | null;
+};
+
+export type AdminSupportTicket = {
+  id: string;
+  userId?: string | null;
+  type: SupportTicketType;
+  message: string;
+  contactPhone?: string | null;
+  status: SupportTicketStatus;
+  resolution?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: {
+    id: string;
+    fullName: string;
+    phone: string;
+    role: UserRole;
   } | null;
 };
 

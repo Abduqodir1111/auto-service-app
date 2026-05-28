@@ -10,6 +10,7 @@ const links = [
   ['/reviews', 'Отзывы'],
   ['/photos', 'Фото'],
   ['/reports', 'Жалобы'],
+  ['/support-tickets', 'Поддержка'],
   ['/moderation-history', 'История'],
   ['/categories', 'Категории'],
   ['/applications', 'Заявки'],

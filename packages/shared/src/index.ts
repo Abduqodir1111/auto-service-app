@@ -53,6 +53,18 @@ export enum ReportStatus {
   REJECTED = 'REJECTED',
 }
 
+export enum SupportTicketType {
+  SUGGESTION = 'SUGGESTION',
+  COMPLAINT = 'COMPLAINT',
+}
+
+export enum SupportTicketStatus {
+  NEW = 'NEW',
+  IN_REVIEW = 'IN_REVIEW',
+  RESOLVED = 'RESOLVED',
+  REJECTED = 'REJECTED',
+}
+
 export enum ModerationEntityType {
   USER = 'USER',
   WORKSHOP = 'WORKSHOP',
@@ -194,6 +206,19 @@ export type ReportItem = {
   resolution?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type SupportTicketItem = {
+  id: string;
+  userId?: string | null;
+  type: SupportTicketType;
+  message: string;
+  contactPhone?: string | null;
+  status: SupportTicketStatus;
+  resolution?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: Pick<AuthUser, 'id' | 'fullName' | 'phone' | 'role'> | null;
 };
 
 export type ServiceCallItem = {

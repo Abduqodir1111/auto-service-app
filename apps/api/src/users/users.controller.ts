@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsBoolean } from 'class-validator';
 import { CurrentUser, JwtUser } from '../common/decorators/current-user.decorator';
@@ -40,7 +49,9 @@ export class UsersController {
   }
 
   @Delete('me')
-  deleteAccount(@CurrentUser() user: JwtUser) {
-    return this.usersService.deleteAccount(user.sub);
+  deleteAccount() {
+    throw new BadRequestException(
+      'Удаление аккаунта доступно только через SMS-подтверждение.',
+    );
   }
 }

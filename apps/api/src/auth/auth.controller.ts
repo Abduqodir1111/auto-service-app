@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RequestPasswordResetCodeDto } from './dto/request-password-reset-code.dto';
+import { ConfirmAccountDeleteDto } from './dto/confirm-account-delete.dto';
 import { RequestSignUpCodeDto } from './dto/request-sign-up-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignInDto } from './dto/sign-in.dto';
@@ -47,6 +48,24 @@ export class AuthController {
   @Post('password-reset/confirm')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('account-delete/request-code')
+  requestAccountDeletionCode(@CurrentUser() user: JwtUser) {
+    return this.authService.requestAccountDeletionCode(user.sub);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('account-delete/confirm')
+  confirmAccountDeletion(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: ConfirmAccountDeleteDto,
+  ) {
+    return this.authService.confirmAccountDeletion(user.sub, dto);
   }
 
   @Post('register')
