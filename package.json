@@ -21,10 +21,12 @@
     "test:db:up": "npm run test:db:up -w @stomvp/api",
     "test:db:down": "npm run test:db:down -w @stomvp/api",
     "test:e2e": "npm run test:e2e -w @stomvp/api",
-    "test": "npm run test:e2e"
+    "test": "npm run test:e2e",
+    "postinstall": "patch-package"
   },
   "devDependencies": {
     "concurrently": "^9.0.1",
+    "patch-package": "^8.0.1",
     "prettier": "^3.4.2"
   },
   "overrides": {

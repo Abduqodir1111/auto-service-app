@@ -1,0 +1,19 @@
+diff --git a/node_modules/expo-image-picker/android/src/main/AndroidManifest.xml b/node_modules/expo-image-picker/android/src/main/AndroidManifest.xml
+index 9ea2a9d..47a1d2e 100644
+--- a/node_modules/expo-image-picker/android/src/main/AndroidManifest.xml
++++ b/node_modules/expo-image-picker/android/src/main/AndroidManifest.xml
+@@ -1,14 +1,5 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+   xmlns:tools="http://schemas.android.com/tools">
+-  <!-- Required for picking images from camera directly -->
+-  <uses-permission android:name="android.permission.CAMERA" />
+-
+-  <!-- Required for picking images from camera roll -->
+-  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+-  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+-  <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+-  <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+-
+   <application>
+     <service
+       android:name="com.google.android.gms.metadata.ModuleDependencies"
