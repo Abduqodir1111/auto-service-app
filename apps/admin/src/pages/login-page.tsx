@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import axios from 'axios';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -32,14 +33,15 @@ export function LoginPage() {
   const onSubmit = handleSubmit(async (values) => {
     try {
       setError(null);
-      await login(values.phone, values.password);
+      await login(values.phone.trim(), values.password.trim());
       navigate('/');
     } catch (submissionError) {
-      setError(
-        submissionError instanceof Error
-          ? submissionError.message
-          : 'Не удалось войти в админку',
-      );
+      if (axios.isAxiosError(submissionError) && submissionError.response?.status === 401) {
+        setError('Неверный телефон или пароль. Проверьте данные и попробуйте ещё раз.');
+        return;
+      }
+
+      setError('Не удалось войти в админку. Попробуйте обновить страницу.');
     }
   });
 
