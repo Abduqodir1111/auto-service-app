@@ -111,6 +111,11 @@ export class AdminService {
 
   async listUsers() {
     const users = await this.prisma.user.findMany({
+      where: {
+        role: {
+          not: UserRole.ADMIN,
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -240,7 +245,6 @@ export class AdminService {
           select: {
             id: true,
             fullName: true,
-            phone: true,
           },
         },
       },

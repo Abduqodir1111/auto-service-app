@@ -80,8 +80,6 @@ export function ModerationHistoryPage() {
                     {log.actor ? (
                       <>
                         <strong>{log.actor.fullName}</strong>
-                        <br />
-                        <span className="muted">{log.actor.phone}</span>
                       </>
                     ) : (
                       <span className="muted">Система / удалённый админ</span>

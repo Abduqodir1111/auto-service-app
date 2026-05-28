@@ -46,7 +46,7 @@ export function AppShell() {
           <div className="panel panel--soft">
             <p className="eyebrow">Сессия</p>
             <strong>{auth?.user.fullName}</strong>
-            <span>{auth?.user.phone}</span>
+            <span>Активная админ-сессия</span>
           </div>
           <button className="button button--ghost" onClick={() => void logout()}>
             Выйти

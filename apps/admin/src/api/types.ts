@@ -195,6 +195,5 @@ export type AdminModerationLog = {
   actor?: {
     id: string;
     fullName: string;
-    phone: string;
   } | null;
 };

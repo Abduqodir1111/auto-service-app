@@ -4,19 +4,30 @@ import { hash } from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminPassword = await hash('Admin123!', 10);
+  const seedAdminPhone = process.env.SEED_ADMIN_PHONE?.trim();
+  const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
 
-  await prisma.user.upsert({
-    where: { phone: '+998900000001' },
-    update: {},
-    create: {
-      fullName: 'Platform Admin',
-      phone: '+998900000001',
-      email: 'admin@stomvp.local',
-      passwordHash: adminPassword,
-      role: UserRole.ADMIN,
-    },
-  });
+  if (seedAdminPhone && seedAdminPassword) {
+    const adminPassword = await hash(seedAdminPassword, 10);
+
+    await prisma.user.upsert({
+      where: { phone: seedAdminPhone },
+      update: {
+        passwordHash: adminPassword,
+        role: UserRole.ADMIN,
+        isBlocked: false,
+      },
+      create: {
+        fullName: process.env.SEED_ADMIN_NAME?.trim() || 'Platform Admin',
+        phone: seedAdminPhone,
+        email: process.env.SEED_ADMIN_EMAIL?.trim() || null,
+        passwordHash: adminPassword,
+        role: UserRole.ADMIN,
+      },
+    });
+  } else {
+    console.log('Skipping admin seed: set SEED_ADMIN_PHONE and SEED_ADMIN_PASSWORD if needed.');
+  }
 
   // Test accounts for App Store / Google Play review.
   // Reviewers can sign in directly with these credentials.

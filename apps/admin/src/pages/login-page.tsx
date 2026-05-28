@@ -55,16 +55,31 @@ export function LoginPage() {
           </p>
         </div>
 
-        <form className="form" onSubmit={onSubmit}>
+        <form className="form" autoComplete="off" onSubmit={onSubmit}>
           <label className="field">
             <span>Телефон</span>
-            <input placeholder="+998..." {...register('phone')} />
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              {...register('phone')}
+            />
             {errors.phone && <small>{errors.phone.message}</small>}
           </label>
 
           <label className="field">
             <span>Пароль</span>
-            <input type="password" {...register('password')} />
+            <input
+              type="password"
+              autoComplete="new-password"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              {...register('password')}
+            />
             {errors.password && <small>{errors.password.message}</small>}
           </label>
 

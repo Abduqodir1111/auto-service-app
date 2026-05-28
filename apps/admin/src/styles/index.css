@@ -25,6 +25,7 @@ body {
   min-height: 100vh;
   background: var(--bg-accent), var(--bg);
   color: var(--text);
+  overflow-x: hidden;
 }
 
 button,
@@ -159,6 +160,7 @@ img {
 
 .content {
   padding: 20px 20px 20px 0;
+  min-width: 0;
 }
 
 .page {
@@ -263,6 +265,7 @@ img {
   background: linear-gradient(135deg, #d66c2f, #ef9c42);
   color: white;
   cursor: pointer;
+  min-height: 44px;
 }
 
 .button:disabled {
@@ -514,6 +517,7 @@ img {
 
   .sidebar {
     margin: 20px 20px 0;
+    gap: 18px;
   }
 
   .content {
@@ -522,6 +526,131 @@ img {
 
   .page--two-columns {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    display: block;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    margin: 0;
+    padding: 14px 14px 12px;
+    border-radius: 0 0 22px 22px;
+    gap: 12px;
+  }
+
+  .sidebar h1,
+  .sidebar > div > .muted {
+    display: none;
+  }
+
+  .sidebar__nav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .sidebar__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sidebar__link {
+    flex: 0 0 auto;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .sidebar__footer {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar__footer .panel--soft {
+    display: none;
+  }
+
+  .content {
+    padding: 14px;
+  }
+
+  .page,
+  .stack {
+    gap: 14px;
+  }
+
+  .page__header h2,
+  .login-card h1 {
+    font-size: 1.55rem;
+    line-height: 1.14;
+  }
+
+  .table-panel {
+    overflow-x: auto;
+    padding: 14px;
+  }
+
+  .table {
+    min-width: 760px;
+  }
+
+  .stats-grid,
+  .photo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-card__top,
+  .review-card__head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .actions .button,
+  .form .button {
+    width: 100%;
+  }
+
+  .field input,
+  .field textarea {
+    min-height: 46px;
+  }
+
+  .workshop-photo {
+    min-width: 156px;
+    max-width: 156px;
+  }
+
+  .service-item {
+    width: 100%;
+  }
+
+  .login-page {
+    align-items: start;
+    place-items: start stretch;
+    padding: 14px;
+  }
+
+  .login-card,
+  .panel,
+  .review-card,
+  .workshop-card,
+  .photo-card,
+  .report-card {
+    border-radius: 20px;
+    padding: 16px;
   }
 }
 
