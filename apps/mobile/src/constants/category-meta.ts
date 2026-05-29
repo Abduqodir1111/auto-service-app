@@ -4,6 +4,9 @@ export const categoryIconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
   localization: 'language-outline',
   'chip-tuning': 'hardware-chip-outline',
   'car-audio': 'musical-notes-outline',
+  'car-wash': 'sparkles-outline',
+  'tow-truck': 'car-outline',
+  'car-alarm': 'shield-outline',
   'gas-station': 'flame-outline',
   'gps-tracking': 'navigate-outline',
   soundproofing: 'volume-high-outline',
@@ -23,6 +26,12 @@ export const categoryIconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
   tinting: 'color-filter-outline',
   detailing: 'sparkles-outline',
   'auto-electronics-multimedia': 'phone-portrait-outline',
+  'auto-parts': 'cube-outline',
+  'technical-inspection': 'clipboard-outline',
+  'car-selection': 'search-outline',
+  'pre-purchase-inspection': 'checkmark-done-outline',
+  'paint-protection-film': 'layers-outline',
+  'electric-vehicles': 'battery-charging-outline',
   'field-service': 'car-outline',
 };
 
