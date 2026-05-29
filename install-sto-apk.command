@@ -1,10 +1,12 @@
 #!/bin/zsh
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-"$SCRIPT_DIR/install-sto-apk.commond"
+exit_code=0
+"$SCRIPT_DIR/install-sto-apk.sh" || exit_code=$?
 
 echo
 echo "Press Enter to close this window."
 read -r _
 
+exit "$exit_code"
