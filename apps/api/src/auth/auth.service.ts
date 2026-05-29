@@ -51,10 +51,18 @@ const LOCKOUT_SECONDS = 15 * 60; // 15 min lock after the 5th fail
 const REFRESH_TOKEN_BYTES = 48;
 const MAX_STORED_USER_AGENT_LENGTH = 255;
 const MAX_STORED_IP_LENGTH = 64;
+const LEGACY_SESSION_UPGRADE_GRACE_DAYS = 45;
+const LEGACY_SESSION_UPGRADE_ISSUED_BEFORE_SECONDS = Date.parse('2026-06-01T00:00:00.000Z') / 1000;
 
 type RefreshContext = {
   userAgent?: string | null;
   ipAddress?: string | null;
+};
+
+type LegacyAccessTokenPayload = {
+  sub?: unknown;
+  exp?: unknown;
+  iat?: unknown;
 };
 
 @Injectable()
@@ -303,6 +311,50 @@ export class AuthService {
     });
   }
 
+  async upgradeLegacySession(request: Request) {
+    const token = this.extractBearerToken(request);
+    if (!token) {
+      throw new UnauthorizedException('Missing access token');
+    }
+
+    let payload: LegacyAccessTokenPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<LegacyAccessTokenPayload>(token, {
+        secret: this.configService.getOrThrow<string>('JWT_SECRET'),
+        ignoreExpiration: true,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid access token');
+    }
+
+    if (typeof payload.sub !== 'string') {
+      throw new UnauthorizedException('Invalid access token');
+    }
+
+    const issuedAt = typeof payload.iat === 'number' ? payload.iat : null;
+    const expiresAt = typeof payload.exp === 'number' ? payload.exp : null;
+    const graceExpiresAt =
+      expiresAt == null ? null : expiresAt + LEGACY_SESSION_UPGRADE_GRACE_DAYS * 24 * 60 * 60;
+    const now = Math.floor(Date.now() / 1000);
+
+    if (
+      issuedAt == null ||
+      expiresAt == null ||
+      issuedAt >= LEGACY_SESSION_UPGRADE_ISSUED_BEFORE_SECONDS ||
+      graceExpiresAt == null ||
+      graceExpiresAt <= now
+    ) {
+      throw new UnauthorizedException('Legacy access token can no longer be upgraded');
+    }
+
+    const user = await this.usersService.getByIdOrThrow(payload.sub);
+    if (user.isBlocked) {
+      throw new UnauthorizedException('Account is blocked');
+    }
+
+    return this.buildAuthResponse(user.id, this.getRefreshContext(request));
+  }
+
   async logout(dto: RefreshTokenDto) {
     const parsed = this.parseRefreshToken(dto.refreshToken);
     if (!parsed) {
@@ -385,6 +437,20 @@ export class AuthService {
     }
 
     return { sessionId, secret };
+  }
+
+  private extractBearerToken(request: Request) {
+    const authorization = request.headers.authorization;
+    if (!authorization) {
+      return null;
+    }
+
+    const [scheme, token, ...rest] = authorization.split(' ');
+    if (scheme !== 'Bearer' || !token || rest.length > 0) {
+      return null;
+    }
+
+    return token;
   }
 
   private hashRefreshSecret(secret: string) {

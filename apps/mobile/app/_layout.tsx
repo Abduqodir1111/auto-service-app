@@ -4,7 +4,7 @@ import { AuthUser, ServiceCallItem, ServiceCallStatus, UserRole } from '@stomvp/
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, AppState, View } from 'react-native';
-import { api } from '../src/api/client';
+import { api, upgradeLegacySession } from '../src/api/client';
 import { colors } from '../src/constants/theme';
 import { useAuthStore } from '../src/store/auth-store';
 import { track } from '../src/utils/analytics';
@@ -65,7 +65,7 @@ function RootLayout() {
   useEffect(() => {
     const accessToken = session?.accessToken;
 
-    if (!hydrated || !accessToken) {
+    if (!hydrated || !accessToken || !session?.refreshToken) {
       return;
     }
 
@@ -106,14 +106,44 @@ function RootLayout() {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, session?.accessToken, setSession]);
+  }, [hydrated, session?.accessToken, session?.refreshToken, setSession]);
+
+  useEffect(() => {
+    const accessToken = session?.accessToken;
+
+    if (!hydrated || !accessToken || session?.refreshToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void upgradeLegacySession(accessToken)
+      .then((nextSession) => {
+        if (cancelled || useAuthStore.getState().session?.accessToken !== accessToken) {
+          return;
+        }
+
+        void setSession(nextSession);
+      })
+      .catch(async () => {
+        if (cancelled || useAuthStore.getState().session?.accessToken !== accessToken) {
+          return;
+        }
+
+        await setSession(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, session?.accessToken, session?.refreshToken, setSession]);
 
   // Register this device's Expo push token with the backend whenever the
   // user is logged in. Re-runs on session change (e.g. relogin as a
   // different user) so each user gets their own tokens on the server.
   useEffect(() => {
     const accessToken = session?.accessToken;
-    if (!hydrated || !accessToken) {
+    if (!hydrated || !accessToken || !session?.refreshToken) {
       return;
     }
     let cancelled = false;
@@ -125,14 +155,19 @@ function RootLayout() {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, session?.accessToken, session?.user?.id]);
+  }, [hydrated, session?.accessToken, session?.refreshToken, session?.user?.id]);
 
   // Master-only: poll for any ringing service call when the app comes to
   // foreground, in case the push was missed (DND, app killed, etc.). If
   // there's a live call ringing this master, jump to the swipe screen.
   const lastSeenCallId = useRef<string | null>(null);
   useEffect(() => {
-    if (!hydrated || !session?.accessToken || session.user.role !== UserRole.MASTER) {
+    if (
+      !hydrated ||
+      !session?.accessToken ||
+      !session.refreshToken ||
+      session.user.role !== UserRole.MASTER
+    ) {
       return;
     }
     let cancelled = false;
@@ -159,9 +194,30 @@ function RootLayout() {
       cancelled = true;
       sub.remove();
     };
-  }, [hydrated, session?.accessToken, session?.user?.id, session?.user?.role]);
+  }, [
+    hydrated,
+    session?.accessToken,
+    session?.refreshToken,
+    session?.user?.id,
+    session?.user?.role,
+  ]);
 
   if (!hydrated) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.background,
+        }}
+      >
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (session?.accessToken && !session.refreshToken) {
     return (
       <View
         style={{

@@ -205,6 +205,29 @@ describe('Auth (e2e)', () => {
         .expect(401);
     });
 
+    it('upgrades a legacy access-only session to a refresh-token session', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ phone: '+998900000010', password: 'CorrectPass1!' })
+        .expect(201);
+
+      const upgrade = await request(app.getHttpServer())
+        .post('/api/auth/session/upgrade')
+        .set('Authorization', `Bearer ${login.body.accessToken}`)
+        .expect(201);
+
+      expect(upgrade.body).toMatchObject({
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        user: { phone: '+998900000010', role: 'CLIENT' },
+      });
+
+      await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: upgrade.body.refreshToken })
+        .expect(201);
+    });
+
     it('rejects a wrong password with 401', async () => {
       await request(app.getHttpServer())
         .post('/api/auth/login')

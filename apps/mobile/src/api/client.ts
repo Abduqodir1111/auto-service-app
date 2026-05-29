@@ -38,6 +38,20 @@ async function refreshSession(refreshToken: string) {
   return data;
 }
 
+export async function upgradeLegacySession(accessToken: string) {
+  const { data } = await axios.post<AuthPayload>(
+    `${api.defaults.baseURL}/auth/session/upgrade`,
+    undefined,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  return data;
+}
+
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().session?.accessToken;
 

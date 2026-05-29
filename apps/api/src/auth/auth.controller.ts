@@ -83,6 +83,11 @@ export class AuthController {
     return this.authService.refresh(dto, request);
   }
 
+  @Post('session/upgrade')
+  upgradeLegacySession(@Req() request: Request) {
+    return this.authService.upgradeLegacySession(request);
+  }
+
   @Post('logout')
   logout(@Body() dto: RefreshTokenDto) {
     return this.authService.logout(dto);

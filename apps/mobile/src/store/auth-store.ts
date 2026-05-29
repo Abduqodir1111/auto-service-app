@@ -4,21 +4,34 @@ import { create } from 'zustand';
 
 const STORAGE_KEY = 'stomvp-mobile-auth';
 
+export type StoredAuthSession = Omit<AuthPayload, 'refreshToken'> & {
+  refreshToken?: string;
+};
+
 type AuthState = {
   hydrated: boolean;
-  session: AuthPayload | null;
+  session: StoredAuthSession | null;
   hydrate: () => Promise<void>;
-  setSession: (session: AuthPayload | null) => Promise<void>;
+  setSession: (session: StoredAuthSession | null) => Promise<void>;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
   hydrated: false,
   session: null,
   async hydrate() {
-    const raw = await SecureStore.getItemAsync(STORAGE_KEY);
-    const session = raw ? (JSON.parse(raw) as Partial<AuthPayload>) : null;
+    let raw: string | null = null;
+    let session: Partial<StoredAuthSession> | null = null;
 
-    if (session && (!session.accessToken || !session.refreshToken || !session.user)) {
+    try {
+      raw = await SecureStore.getItemAsync(STORAGE_KEY);
+      session = raw ? (JSON.parse(raw) as Partial<StoredAuthSession>) : null;
+    } catch {
+      await SecureStore.deleteItemAsync(STORAGE_KEY);
+      set({ hydrated: true, session: null });
+      return;
+    }
+
+    if (session && (!session.accessToken || !session.user)) {
       await SecureStore.deleteItemAsync(STORAGE_KEY);
       set({ hydrated: true, session: null });
       return;
@@ -26,7 +39,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     set({
       hydrated: true,
-      session: session ? (session as AuthPayload) : null,
+      session: session ? (session as StoredAuthSession) : null,
     });
   },
   async setSession(session) {
