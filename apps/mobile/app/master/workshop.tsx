@@ -3,7 +3,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Controller,
@@ -26,7 +28,9 @@ import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
+import { useAuthStore } from '../../src/store/auth-store';
 import { useMapPickerStore } from '../../src/store/map-picker-store';
+import { getDeviceCoordinates } from '../../src/utils/device-location';
 import { getDefaultMapCoordinates, openExternalMap } from '../../src/utils/maps';
 import { useResponsive } from '../../src/utils/responsive';
 import { getWorkshopReadiness } from '../../src/utils/workshop-readiness';
@@ -50,7 +54,6 @@ const schema = z.object({
   title: z.string(),
   description: z.string(),
   phone: z.string(),
-  telegram: z.string().optional(),
   addressLine: z.string(),
   city: z.string(),
   openingHours: z.string().optional(),
@@ -66,7 +69,6 @@ type SaveWorkshopPayload = {
   title: string;
   description: string;
   phone: string;
-  telegram?: string;
   addressLine: string;
   city: string;
   openingHours?: string;
@@ -81,19 +83,51 @@ type SaveWorkshopPayload = {
   }>;
 };
 
-const defaultFormValues: FormValues = {
-  title: '',
-  description: '',
-  phone: '',
-  telegram: '',
-  addressLine: '',
-  city: '',
-  openingHours: '',
-  latitude: undefined,
-  longitude: undefined,
-  categoryIds: [],
-  services: [{ name: '', description: '', priceFrom: undefined, priceTo: undefined }],
-};
+const DRAFT_STORAGE_PREFIX = 'stomvp-workshop-draft-v1';
+const CREATE_DRAFT_KEY = 'new';
+
+const schedulePresets = [
+  { label: '24/7', value: '24/7' },
+  { label: 'Ежедневно 09:00-21:00', value: 'Ежедневно 09:00-21:00' },
+  { label: 'Пн-Пт 09:00-18:00', value: 'Пн-Пт 09:00-18:00' },
+  { label: 'По записи', value: 'По записи' },
+] as const;
+
+const scheduleTimeOptions = [
+  '00:00',
+  '07:00',
+  '08:00',
+  '09:00',
+  '10:00',
+  '11:00',
+  '12:00',
+  '13:00',
+  '14:00',
+  '15:00',
+  '16:00',
+  '17:00',
+  '18:00',
+  '19:00',
+  '20:00',
+  '21:00',
+  '22:00',
+  '23:00',
+] as const;
+
+function getDefaultFormValues(registeredPhone = ''): FormValues {
+  return {
+    title: '',
+    description: '',
+    phone: registeredPhone,
+    addressLine: '',
+    city: '',
+    openingHours: '',
+    latitude: undefined,
+    longitude: undefined,
+    categoryIds: [],
+    services: [{ name: '', description: '', priceFrom: undefined, priceTo: undefined }],
+  };
+}
 
 const statusLabels: Record<WorkshopStatus, string> = {
   [WorkshopStatus.DRAFT]: 'Черновик',
@@ -119,6 +153,66 @@ const photoStatusLabels: Record<PhotoStatus, string> = {
 
 const unsavedWorkshopDrafts = new Map<string, FormValues>();
 
+function getDraftStorageKey(userId: string | undefined, draftKey: string | null) {
+  if (!userId || !draftKey) {
+    return null;
+  }
+
+  return `${DRAFT_STORAGE_PREFIX}:${userId}:${draftKey}`;
+}
+
+async function readPersistedDraft(
+  userId: string | undefined,
+  draftKey: string | null,
+  registeredPhone: string,
+) {
+  const storageKey = getDraftStorageKey(userId, draftKey);
+
+  if (!storageKey) {
+    return null;
+  }
+
+  try {
+    const rawDraft = await SecureStore.getItemAsync(storageKey);
+    return rawDraft ? normalizeFormValues(JSON.parse(rawDraft) as Partial<FormValues>, registeredPhone) : null;
+  } catch {
+    try {
+      await SecureStore.deleteItemAsync(storageKey);
+    } catch {
+      // Ignore cleanup errors for a corrupted draft.
+    }
+    return null;
+  }
+}
+
+async function persistDraft(userId: string | undefined, draftKey: string | null, values: FormValues) {
+  const storageKey = getDraftStorageKey(userId, draftKey);
+
+  if (!storageKey) {
+    return;
+  }
+
+  try {
+    await SecureStore.setItemAsync(storageKey, JSON.stringify(values));
+  } catch {
+    // Draft persistence is helpful, but saving the announcement must not depend on it.
+  }
+}
+
+async function deletePersistedDraft(userId: string | undefined, draftKey: string | null) {
+  const storageKey = getDraftStorageKey(userId, draftKey);
+
+  if (!storageKey) {
+    return;
+  }
+
+  try {
+    await SecureStore.deleteItemAsync(storageKey);
+  } catch {
+    // Nothing to do if the old draft is already gone.
+  }
+}
+
 function getApiErrorMessage(error: unknown, fallback: string) {
   const apiMessage = axios.isAxiosError(error) ? error.response?.data?.message : null;
 
@@ -133,12 +227,11 @@ function getApiErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-function normalizeFormValues(values?: Partial<FormValues>): FormValues {
+function normalizeFormValues(values?: Partial<FormValues>, registeredPhone = ''): FormValues {
   return {
     title: values?.title ?? '',
     description: values?.description ?? '',
-    phone: values?.phone ?? '',
-    telegram: values?.telegram ?? '',
+    phone: values?.phone ?? registeredPhone,
     addressLine: values?.addressLine ?? '',
     city: values?.city ?? '',
     openingHours: values?.openingHours ?? '',
@@ -157,12 +250,11 @@ function normalizeFormValues(values?: Partial<FormValues>): FormValues {
   };
 }
 
-function mapWorkshopToForm(workshop: WorkshopDetails): FormValues {
+function mapWorkshopToForm(workshop: WorkshopDetails, registeredPhone = ''): FormValues {
   return normalizeFormValues({
     title: workshop.title,
     description: workshop.description,
-    phone: workshop.phone,
-    telegram: workshop.telegram ?? '',
+    phone: workshop.phone || registeredPhone,
     addressLine: workshop.addressLine,
     city: workshop.city,
     openingHours: workshop.openingHours ?? '',
@@ -181,6 +273,66 @@ function mapWorkshopToForm(workshop: WorkshopDetails): FormValues {
 function normalizeOptionalText(value?: string) {
   const trimmed = value?.trim() ?? '';
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function formatCustomSchedule(from: string, to: string) {
+  return `Ежедневно ${from}-${to}`;
+}
+
+function getScheduleTimes(value?: string) {
+  const match = value?.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+
+  return {
+    from: match?.[1] ?? '09:00',
+    to: match?.[2] ?? '18:00',
+  };
+}
+
+function buildAddressLine(address: Location.LocationGeocodedAddress) {
+  return [
+    address.street,
+    address.name,
+    address.district,
+  ]
+    .filter((part): part is string => Boolean(part && part.trim().length > 0))
+    .join(', ');
+}
+
+async function reverseGeocodeCoordinates(latitude: number, longitude: number) {
+  try {
+    const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
+
+    if (!address) {
+      return { addressLine: '', city: '' };
+    }
+
+    return {
+      addressLine: buildAddressLine(address),
+      city: address.city || address.subregion || address.region || address.country || '',
+    };
+  } catch {
+    return { addressLine: '', city: '' };
+  }
+}
+
+async function pickWorkshopPhoto(source: 'camera' | 'library') {
+  if (source === 'camera') {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      throw new Error('Разрешите доступ к камере, чтобы сделать фото для объявления.');
+    }
+
+    return ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+  }
+
+  return ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    quality: 0.8,
+  });
 }
 
 function buildWorkshopPayload(values: FormValues): SaveWorkshopPayload {
@@ -217,7 +369,6 @@ function buildWorkshopPayload(values: FormValues): SaveWorkshopPayload {
     title: values.title.trim(),
     description: values.description.trim(),
     phone: values.phone.trim(),
-    telegram: normalizeOptionalText(values.telegram),
     addressLine: values.addressLine.trim(),
     city: values.city.trim(),
     openingHours: normalizeOptionalText(values.openingHours),
@@ -235,7 +386,10 @@ export default function WorkshopEditorScreen() {
     returnToProfile?: string | string[];
   }>();
   const queryClient = useQueryClient();
+  const session = useAuthStore((state) => state.session);
   const [savedWorkshopId, setSavedWorkshopId] = useState<string | null>(null);
+  const [scheduleFrom, setScheduleFrom] = useState('09:00');
+  const [scheduleTo, setScheduleTo] = useState('18:00');
   const hydratedWorkshopIdRef = useRef<string | null>(null);
   const pickedLocation = useMapPickerStore((state) => state.selectedLocation);
   const setPickerInitialLocation = useMapPickerStore((state) => state.setPickerInitialLocation);
@@ -254,6 +408,8 @@ export default function WorkshopEditorScreen() {
   );
   const isCreateMode = modeParam === 'create';
   const shouldReturnToProfileAfterSave = returnToProfileParam === '1';
+  const registeredPhone = session?.user.phone ?? '';
+  const draftStorageUserId = session?.user.id;
   const layout = useResponsive();
   const compact = layout.isSmallPhone;
   const cardRadius = compact ? 18 : 22;
@@ -281,6 +437,7 @@ export default function WorkshopEditorScreen() {
 
   const {
     control,
+    getValues,
     handleSubmit,
     reset,
     setValue,
@@ -288,7 +445,7 @@ export default function WorkshopEditorScreen() {
     formState: { errors, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: defaultFormValues,
+    defaultValues: getDefaultFormValues(registeredPhone),
   });
 
   const workshops = myWorkshopQuery.data ?? [];
@@ -304,62 +461,153 @@ export default function WorkshopEditorScreen() {
     return workshops[0];
   }, [isCreateMode, workshopIdParam, workshops]);
   const activeWorkshopId = selectedWorkshop?.id ?? savedWorkshopId;
+  const currentDraftKey = activeWorkshopId ?? workshopIdParam ?? (isCreateMode ? CREATE_DRAFT_KEY : null);
 
   useEffect(() => {
-    if (selectedWorkshop) {
-      const isNewWorkshopSelection = hydratedWorkshopIdRef.current !== selectedWorkshop.id;
-      const localDraft = unsavedWorkshopDrafts.get(selectedWorkshop.id);
-      const nextValues = localDraft ?? mapWorkshopToForm(selectedWorkshop);
+    let cancelled = false;
 
-      if (isNewWorkshopSelection || !isDirty) {
-        reset(nextValues);
-      }
+    const applyScheduleState = (values: FormValues) => {
+      const times = getScheduleTimes(values.openingHours);
+      setScheduleFrom(times.from);
+      setScheduleTo(times.to);
+    };
 
-      setSavedWorkshopId(selectedWorkshop.id);
-      hydratedWorkshopIdRef.current = selectedWorkshop.id;
-      return;
-    }
+    const hydrateDraft = async () => {
+      if (selectedWorkshop) {
+        const draftKey = selectedWorkshop.id;
+        const isNewWorkshopSelection = hydratedWorkshopIdRef.current !== draftKey;
+        const memoryDraft = unsavedWorkshopDrafts.get(draftKey);
+        const persistedDraft = memoryDraft
+          ? null
+          : await readPersistedDraft(draftStorageUserId, draftKey, registeredPhone);
+        const nextValues =
+          memoryDraft ?? persistedDraft ?? mapWorkshopToForm(selectedWorkshop, registeredPhone);
 
-    if (workshopIdParam) {
-      const localDraft = unsavedWorkshopDrafts.get(workshopIdParam);
+        if (cancelled) {
+          return;
+        }
 
-      if (localDraft) {
-        reset(localDraft);
-        setSavedWorkshopId(workshopIdParam);
-        hydratedWorkshopIdRef.current = workshopIdParam;
+        if (isNewWorkshopSelection || !isDirty) {
+          reset(nextValues);
+          applyScheduleState(nextValues);
+        }
+
+        setSavedWorkshopId(selectedWorkshop.id);
+        hydratedWorkshopIdRef.current = selectedWorkshop.id;
         return;
       }
-    }
 
-    if (!workshopIdParam && (isCreateMode || !myWorkshopQuery.isLoading)) {
-      reset(defaultFormValues);
-      setSavedWorkshopId(null);
-      hydratedWorkshopIdRef.current = null;
-    }
-  }, [isCreateMode, isDirty, myWorkshopQuery.isLoading, reset, selectedWorkshop, workshopIdParam]);
+      if (workshopIdParam) {
+        const memoryDraft = unsavedWorkshopDrafts.get(workshopIdParam);
+        const persistedDraft = memoryDraft
+          ? null
+          : await readPersistedDraft(draftStorageUserId, workshopIdParam, registeredPhone);
+        const nextValues = memoryDraft ?? persistedDraft;
+
+        if (cancelled) {
+          return;
+        }
+
+        if (nextValues) {
+          reset(nextValues);
+          applyScheduleState(nextValues);
+          setSavedWorkshopId(workshopIdParam);
+          hydratedWorkshopIdRef.current = workshopIdParam;
+        }
+
+        return;
+      }
+
+      if (!workshopIdParam && (isCreateMode || !myWorkshopQuery.isLoading)) {
+        const draftKey = CREATE_DRAFT_KEY;
+        const isNewWorkshopSelection = hydratedWorkshopIdRef.current !== draftKey;
+        const memoryDraft = unsavedWorkshopDrafts.get(draftKey);
+        const persistedDraft = memoryDraft
+          ? null
+          : await readPersistedDraft(draftStorageUserId, draftKey, registeredPhone);
+        const nextValues = memoryDraft ?? persistedDraft ?? getDefaultFormValues(registeredPhone);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (isNewWorkshopSelection || !isDirty) {
+          reset(nextValues);
+          applyScheduleState(nextValues);
+        }
+
+        setSavedWorkshopId(null);
+        hydratedWorkshopIdRef.current = draftKey;
+      }
+    };
+
+    void hydrateDraft();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    draftStorageUserId,
+    isCreateMode,
+    isDirty,
+    myWorkshopQuery.isLoading,
+    registeredPhone,
+    reset,
+    selectedWorkshop,
+    workshopIdParam,
+  ]);
 
   useEffect(() => {
-    const draftKey = activeWorkshopId ?? workshopIdParam;
-
-    if (!draftKey) {
+    if (!currentDraftKey) {
       return;
     }
 
     const subscription = watch((values) => {
-      unsavedWorkshopDrafts.set(draftKey, normalizeFormValues(values as Partial<FormValues>));
+      const normalizedDraft = normalizeFormValues(values as Partial<FormValues>, registeredPhone);
+      unsavedWorkshopDrafts.set(currentDraftKey, normalizedDraft);
+      void persistDraft(draftStorageUserId, currentDraftKey, normalizedDraft);
     });
 
     return () => subscription.unsubscribe();
-  }, [activeWorkshopId, watch, workshopIdParam]);
+  }, [currentDraftKey, draftStorageUserId, registeredPhone, watch]);
+
+  useEffect(() => {
+    if (!currentDraftKey || !draftStorageUserId) {
+      return;
+    }
+
+    const normalizedDraft = normalizeFormValues(getValues(), registeredPhone);
+    unsavedWorkshopDrafts.set(currentDraftKey, normalizedDraft);
+    void persistDraft(draftStorageUserId, currentDraftKey, normalizedDraft);
+  }, [currentDraftKey, draftStorageUserId, getValues, registeredPhone]);
 
   useEffect(() => {
     if (!pickedLocation) {
       return;
     }
 
+    let cancelled = false;
+
     setValue('latitude', pickedLocation.latitude, { shouldDirty: true });
     setValue('longitude', pickedLocation.longitude, { shouldDirty: true });
+    void reverseGeocodeCoordinates(pickedLocation.latitude, pickedLocation.longitude).then((locationDetails) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (locationDetails.city) {
+        setValue('city', locationDetails.city, { shouldDirty: true });
+      }
+
+      if (locationDetails.addressLine) {
+        setValue('addressLine', locationDetails.addressLine, { shouldDirty: true });
+      }
+    });
     clearMapPickerState();
+
+    return () => {
+      cancelled = true;
+    };
   }, [clearMapPickerState, pickedLocation, setValue]);
 
   const { fields, append, remove } = useFieldArray({
@@ -370,6 +618,7 @@ export default function WorkshopEditorScreen() {
   const selectedCategories = watch('categoryIds');
   const latitude = watch('latitude');
   const longitude = watch('longitude');
+  const openingHours = watch('openingHours') ?? '';
   const formSnapshot = watch();
   const photos = selectedWorkshop?.photos ?? [];
   const pendingPhotos = photos.filter((photo) => photo.status === PhotoStatus.PENDING).length;
@@ -379,6 +628,47 @@ export default function WorkshopEditorScreen() {
   const screenSubtitle = activeWorkshopId
     ? 'Обновляйте фото, услуги и точку на карте, чтобы карточка в каталоге всегда была актуальной.'
     : 'Черновик создаётся сразу, поэтому фото можно добавлять без отдельного первого сохранения.';
+
+  const detectCurrentLocation = useMutation({
+    mutationFn: async () => {
+      const fallback = getDefaultMapCoordinates();
+      const result = await getDeviceCoordinates(fallback);
+
+      if (result.permissionDenied || !result.coordinates) {
+        throw new Error('Разрешите доступ к геолокации, чтобы автоматически определить город.');
+      }
+
+      const details = await reverseGeocodeCoordinates(
+        result.coordinates.latitude,
+        result.coordinates.longitude,
+      );
+
+      return {
+        ...result.coordinates,
+        ...details,
+      };
+    },
+    onSuccess: (locationDetails) => {
+      setValue('latitude', locationDetails.latitude, { shouldDirty: true });
+      setValue('longitude', locationDetails.longitude, { shouldDirty: true });
+
+      if (locationDetails.city) {
+        setValue('city', locationDetails.city, { shouldDirty: true });
+      }
+
+      if (locationDetails.addressLine) {
+        setValue('addressLine', locationDetails.addressLine, { shouldDirty: true });
+      }
+    },
+    onError: (error) => {
+      Alert.alert(
+        'Не удалось определить локацию',
+        error instanceof Error
+          ? error.message
+          : 'Проверьте разрешение на геолокацию и попробуйте ещё раз.',
+      );
+    },
+  });
 
   const mutation = useMutation({
     mutationFn: async (payload: SaveWorkshopPayload) => {
@@ -391,10 +681,19 @@ export default function WorkshopEditorScreen() {
       return data;
     },
     onSuccess: async (workshop) => {
+      const savedValues = mapWorkshopToForm(workshop, registeredPhone);
+      const savedScheduleTimes = getScheduleTimes(savedValues.openingHours);
       setSavedWorkshopId(workshop.id);
-      reset(mapWorkshopToForm(workshop));
+      reset(savedValues);
+      setScheduleFrom(savedScheduleTimes.from);
+      setScheduleTo(savedScheduleTimes.to);
       hydratedWorkshopIdRef.current = workshop.id;
       unsavedWorkshopDrafts.delete(workshop.id);
+      unsavedWorkshopDrafts.delete(CREATE_DRAFT_KEY);
+      await Promise.all([
+        deletePersistedDraft(draftStorageUserId, workshop.id),
+        deletePersistedDraft(draftStorageUserId, CREATE_DRAFT_KEY),
+      ]);
       queryClient.setQueryData<WorkshopDetails[]>(['my-workshops'], (current) => {
         const existing = current ?? [];
         return [workshop, ...existing.filter((item) => item.id !== workshop.id)];
@@ -434,15 +733,12 @@ export default function WorkshopEditorScreen() {
   };
 
   const uploadPhoto = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (source: 'camera' | 'library') => {
       if (!activeWorkshopId) {
         throw new Error('Сначала сохраните объявление');
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
-      });
+      const result = await pickWorkshopPhoto(source);
 
       if (result.canceled) {
         return;
@@ -498,6 +794,20 @@ export default function WorkshopEditorScreen() {
   });
 
   const isPhotoActionBusy = uploadPhoto.isPending || setPrimaryPhoto.isPending || deletePhoto.isPending;
+
+  const choosePhotoSource = () => {
+    Alert.alert('Добавить фото', 'Выберите источник изображения для объявления.', [
+      {
+        text: 'Сфоткать',
+        onPress: () => uploadPhoto.mutate('camera'),
+      },
+      {
+        text: 'Выбрать из галереи',
+        onPress: () => uploadPhoto.mutate('library'),
+      },
+      { text: 'Отмена', style: 'cancel' },
+    ]);
+  };
 
   const confirmDeletePhoto = (photoId: string) => {
     Alert.alert('Удалить фото?', 'Фото удалится из объявления и с сервера.', [
@@ -618,6 +928,7 @@ export default function WorkshopEditorScreen() {
         render={({ field }) => (
           <Field
             label="Телефон"
+            keyboardType="phone-pad"
             value={field.value}
             onChangeText={field.onChange}
             error={errors.phone?.message}
@@ -625,57 +936,143 @@ export default function WorkshopEditorScreen() {
         )}
       />
 
-      <Controller
-        control={control}
-        name="telegram"
-        render={({ field }) => (
-          <Field
-            label="Telegram / username"
-            value={field.value}
-            onChangeText={field.onChange}
-            error={errors.telegram?.message}
-          />
-        )}
-      />
+      <View style={styles.addressSection}>
+        <View style={[styles.addressHeader, compact && styles.addressHeaderCompact]}>
+          <View style={styles.mapSectionHeader}>
+            <Ionicons name="navigate-outline" size={20} color={colors.accentDark} />
+            <Text style={styles.sectionTitle}>Адрес и город</Text>
+          </View>
+          <Pressable
+            onPress={() => detectCurrentLocation.mutate()}
+            disabled={detectCurrentLocation.isPending}
+            style={[
+              styles.secondaryButton,
+              { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
+              detectCurrentLocation.isPending && styles.disabledButton,
+            ]}
+          >
+            <Text style={styles.secondaryText}>
+              {detectCurrentLocation.isPending ? 'Определяем...' : 'Определить по GPS'}
+            </Text>
+          </Pressable>
+        </View>
 
-      <Controller
-        control={control}
-        name="addressLine"
-        render={({ field }) => (
-          <Field
-            label="Адрес"
-            value={field.value}
-            onChangeText={field.onChange}
-            error={errors.addressLine?.message}
-          />
-        )}
-      />
+        <Controller
+          control={control}
+          name="addressLine"
+          render={({ field }) => (
+            <Field
+              label="Адрес"
+              value={field.value}
+              onChangeText={field.onChange}
+              error={errors.addressLine?.message}
+            />
+          )}
+        />
 
-      <Controller
-        control={control}
-        name="city"
-        render={({ field }) => (
-          <Field
-            label="Город"
-            value={field.value}
-            onChangeText={field.onChange}
-            error={errors.city?.message}
-          />
-        )}
-      />
+        <Controller
+          control={control}
+          name="city"
+          render={({ field }) => (
+            <Field
+              label="Город"
+              value={field.value}
+              onChangeText={field.onChange}
+              error={errors.city?.message}
+            />
+          )}
+        />
+      </View>
 
-      <Controller
-        control={control}
-        name="openingHours"
-        render={({ field }) => (
-          <Field
-            label="График работы"
-            value={field.value}
-            onChangeText={field.onChange}
-            error={errors.openingHours?.message}
-          />
-        )}
-      />
+      <View style={styles.scheduleSection}>
+        <View style={styles.mapSectionHeader}>
+          <Ionicons name="time-outline" size={20} color={colors.accentDark} />
+          <Text style={styles.sectionTitle}>График работы</Text>
+        </View>
+        <View style={styles.schedulePresetList}>
+          {schedulePresets.map((preset) => {
+            const active = openingHours === preset.value;
+            return (
+              <Pressable
+                key={preset.value}
+                onPress={() => setValue('openingHours', preset.value, { shouldDirty: true })}
+                style={[
+                  styles.schedulePreset,
+                  { borderRadius: buttonRadius },
+                  active && styles.schedulePresetActive,
+                ]}
+              >
+                <Text style={[styles.schedulePresetText, active && styles.schedulePresetTextActive]}>
+                  {preset.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={[styles.customScheduleCard, { borderRadius: cardRadius, padding: cardPadding }]}>
+          <Text style={styles.customScheduleTitle}>Выбрать время вручную</Text>
+          <Text style={styles.customScheduleValue}>{formatCustomSchedule(scheduleFrom, scheduleTo)}</Text>
+          <View style={styles.timeRows}>
+            <Text style={styles.timeRowLabel}>С</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.timeChipRail}
+            >
+              {scheduleTimeOptions.map((time) => {
+                const active = scheduleFrom === time;
+                return (
+                  <Pressable
+                    key={`from-${time}`}
+                    onPress={() => {
+                      setScheduleFrom(time);
+                      setValue('openingHours', formatCustomSchedule(time, scheduleTo), {
+                        shouldDirty: true,
+                      });
+                    }}
+                    style={[styles.timeChip, active && styles.timeChipActive]}
+                  >
+                    <Text style={[styles.timeChipText, active && styles.timeChipTextActive]}>
+                      {time}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+          <View style={styles.timeRows}>
+            <Text style={styles.timeRowLabel}>До</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.timeChipRail}
+            >
+              {scheduleTimeOptions.map((time) => {
+                const active = scheduleTo === time;
+                return (
+                  <Pressable
+                    key={`to-${time}`}
+                    onPress={() => {
+                      setScheduleTo(time);
+                      setValue('openingHours', formatCustomSchedule(scheduleFrom, time), {
+                        shouldDirty: true,
+                      });
+                    }}
+                    style={[styles.timeChip, active && styles.timeChipActive]}
+                  >
+                    <Text style={[styles.timeChipText, active && styles.timeChipTextActive]}>
+                      {time}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+        {errors.openingHours?.message ? (
+          <Text style={styles.errorText}>{errors.openingHours.message}</Text>
+        ) : null}
+      </View>
 
       <View style={styles.mapSection}>
         <View style={styles.mapSectionHeader}>
@@ -704,11 +1101,11 @@ export default function WorkshopEditorScreen() {
             <Pressable
               onPress={openLocationPicker}
               style={[
-                styles.secondaryButton,
+                styles.ghostButton,
                 { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
               ]}
             >
-              <Text style={styles.secondaryText}>
+              <Text style={styles.ghostText}>
                 {latitude != null && longitude != null ? 'Изменить точку' : 'Выбрать на карте'}
               </Text>
             </Pressable>
@@ -776,7 +1173,7 @@ export default function WorkshopEditorScreen() {
             Фото объявления
           </Text>
           <Pressable
-            onPress={() => uploadPhoto.mutate()}
+            onPress={choosePhotoSource}
             disabled={!activeWorkshopId || uploadPhoto.isPending}
             style={[
               styles.secondaryButton,
@@ -1062,6 +1459,91 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.text,
     fontSize: 18,
+  },
+  addressSection: {
+    gap: 10,
+  },
+  addressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  addressHeaderCompact: {
+    alignItems: 'flex-start',
+  },
+  scheduleSection: {
+    gap: 10,
+  },
+  schedulePresetList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  schedulePreset: {
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  schedulePresetActive: {
+    backgroundColor: '#EAF4F1',
+    borderColor: colors.success,
+  },
+  schedulePresetText: {
+    color: colors.text,
+    fontWeight: '700',
+  },
+  schedulePresetTextActive: {
+    color: colors.success,
+  },
+  customScheduleCard: {
+    gap: 10,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  customScheduleTitle: {
+    color: colors.text,
+    fontWeight: '800',
+  },
+  customScheduleValue: {
+    color: colors.accentDark,
+    fontWeight: '800',
+  },
+  timeRows: {
+    gap: 8,
+  },
+  timeRowLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  timeChipRail: {
+    gap: 8,
+    paddingRight: 12,
+  },
+  timeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#F8F5EF',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  timeChipActive: {
+    backgroundColor: '#FFF0E5',
+    borderColor: colors.accent,
+  },
+  timeChipText: {
+    color: colors.text,
+    fontWeight: '700',
+  },
+  timeChipTextActive: {
+    color: colors.accentDark,
   },
   mapSection: {
     gap: 10,
