@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Text, TextInput, TextInputProps, View, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 import { colors } from '../src/constants/theme';
 
 type Props = TextInputProps & {
@@ -10,7 +11,11 @@ type Props = TextInputProps & {
   icon?: keyof typeof Ionicons.glyphMap;
 };
 
-export function Field({ label, error, multiline, icon, ...props }: Props) {
+export function Field({ label, error, multiline, icon, secureTextEntry, ...props }: Props) {
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const canTogglePassword = Boolean(secureTextEntry) && !multiline;
+  const resolvedSecureTextEntry = Boolean(secureTextEntry) && !passwordVisible;
+
   return (
     <View style={styles.wrapper}>
       <Text style={styles.label}>{label}</Text>
@@ -22,8 +27,24 @@ export function Field({ label, error, multiline, icon, ...props }: Props) {
           multiline={multiline}
           placeholderTextColor={colors.muted}
           style={[styles.input, multiline && styles.multiline]}
+          secureTextEntry={resolvedSecureTextEntry}
           {...props}
         />
+        {canTogglePassword ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={passwordVisible ? 'Скрыть пароль' : 'Показать пароль'}
+            hitSlop={8}
+            onPress={() => setPasswordVisible((current) => !current)}
+            style={styles.passwordToggle}
+          >
+            <Ionicons
+              name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={colors.muted}
+            />
+          </Pressable>
+        ) : null}
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
@@ -65,6 +86,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     paddingVertical: 12,
+  },
+  passwordToggle: {
+    marginLeft: 10,
+    padding: 4,
   },
   multiline: {
     minHeight: 100,

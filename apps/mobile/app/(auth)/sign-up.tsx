@@ -14,12 +14,13 @@ import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { usePendingSignUpStore } from '../../src/store/pending-sign-up-store';
 import { track } from '../../src/utils/analytics';
+import { isLikelyPhone, normalizePhoneForApi } from '../../src/utils/phone';
 import { useResponsive } from '../../src/utils/responsive';
 
 const schema = z
   .object({
     fullName: z.string().min(2, 'Введите имя'),
-    phone: z.string().min(6, 'Введите телефон'),
+    phone: z.string().refine(isLikelyPhone, 'Введите телефон в формате +998 90 123 45 67'),
     password: z.string().min(6, 'Минимум 6 символов'),
     confirmPassword: z.string().min(6, 'Повторите пароль'),
     role: z.nativeEnum(UserRole),
@@ -64,7 +65,9 @@ export default function SignUpScreen() {
 
   const requestCodeMutation = useMutation({
     mutationFn: async (value: { phone: string }) => {
-      const { data } = await api.post<RequestCodeResponse>('/auth/register/request-code', value);
+      const { data } = await api.post<RequestCodeResponse>('/auth/register/request-code', {
+        phone: normalizePhoneForApi(value.phone),
+      });
       return data;
     },
     onSuccess: () => {
@@ -216,13 +219,14 @@ export default function SignUpScreen() {
 
             <Pressable
               onPress={handleSubmit((values) => {
+                const phone = normalizePhoneForApi(values.phone);
                 setPendingPayload({
                   fullName: values.fullName,
-                  phone: values.phone,
+                  phone,
                   password: values.password,
                   role: values.role,
                 });
-                requestCodeMutation.mutate({ phone: values.phone });
+                requestCodeMutation.mutate({ phone });
               })}
               style={({ pressed }) => [
                 styles.primaryButton,

@@ -4,11 +4,12 @@ import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
+import { showError, showSuccess } from '../../src/store/feedback-store';
 import { useAuthStore } from '../../src/store/auth-store';
 import { useResponsive } from '../../src/utils/responsive';
 
@@ -43,9 +44,10 @@ export default function SupportSettingsScreen() {
     onSuccess: () => {
       setMessage('');
       setNotice('Обращение отправлено. Администратор увидит его в панели поддержки.');
+      showSuccess('Обращение отправлено', 'Администратор увидит его в панели поддержки.');
     },
     onError: (error) => {
-      Alert.alert('Ошибка', getApiErrorMessage(error));
+      showError('Ошибка', getApiErrorMessage(error));
     },
   });
 

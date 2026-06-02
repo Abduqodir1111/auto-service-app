@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Screen } from '../../components/screen';
 import { colors } from '../../src/constants/theme';
+import { showError, showWarning } from '../../src/store/feedback-store';
 import { useMapPickerStore } from '../../src/store/map-picker-store';
 import { getDeviceCoordinates } from '../../src/utils/device-location';
 import { createLeafletHtml } from '../../src/utils/leaflet-html';
@@ -104,7 +105,7 @@ export default function MapPickerScreen() {
 
       if (!result.coordinates) {
         if (result.permissionDenied) {
-          Alert.alert(
+          showWarning(
             'Нет доступа к геопозиции',
             'Разрешите доступ к локации, чтобы сразу поставить точку рядом с вами.',
           );
@@ -124,7 +125,7 @@ export default function MapPickerScreen() {
         longitude: nextLocation.longitude,
       });
     } catch {
-      Alert.alert(
+      showError(
         'Не удалось определить геопозицию',
         'Проверьте доступ к геолокации и попробуйте ещё раз.',
       );
@@ -162,7 +163,13 @@ export default function MapPickerScreen() {
           }}
         />
 
-        <Pressable onPress={() => void locateMe()} style={styles.locateButton}>
+        <Pressable
+          onPress={() => void locateMe()}
+          style={styles.locateButton}
+          accessibilityRole="button"
+          accessibilityLabel="Определить мою текущую локацию"
+          hitSlop={8}
+        >
           {isLocating ? (
             <ActivityIndicator size="small" color={colors.accentDark} />
           ) : (
@@ -179,7 +186,12 @@ export default function MapPickerScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.secondaryButton}
+          accessibilityRole="button"
+          accessibilityLabel="Отменить выбор точки"
+        >
           <Text style={styles.secondaryText}>Отмена</Text>
         </Pressable>
         <Pressable
@@ -192,6 +204,8 @@ export default function MapPickerScreen() {
             router.back();
           }}
           style={styles.primaryButton}
+          accessibilityRole="button"
+          accessibilityLabel="Сохранить выбранную точку объявления"
         >
           <Text style={styles.primaryText}>Сохранить точку</Text>
         </Pressable>

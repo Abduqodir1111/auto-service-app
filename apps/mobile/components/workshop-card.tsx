@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import * as Linking from 'expo-linking';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WorkshopSummary } from '@stomvp/shared';
 import { getCategoryIcon } from '../src/constants/category-meta';
 import { colors } from '../src/constants/theme';
+import { showError } from '../src/store/feedback-store';
+import { callPhone } from '../src/utils/linking-actions';
 import { clamp, useResponsive } from '../src/utils/responsive';
 
 type Props = {
@@ -29,6 +30,9 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
   const layout = useResponsive();
   const coverPhoto = workshop.photos.find((photo) => photo.isPrimary) ?? workshop.photos[0];
   const hasCoordinates = workshop.latitude != null && workshop.longitude != null;
+  const hasPhone = Boolean(workshop.phone?.trim());
+  const visibleCategories = workshop.categories.slice(0, 2);
+  const hiddenCategoriesCount = Math.max(workshop.categories.length - visibleCategories.length, 0);
   const compact = layout.isSmallPhone;
   const coverHeight = clamp(layout.contentWidth * (compact ? 0.52 : 0.5), compact ? 148 : 170, layout.isTablet ? 260 : 210);
   const actionSize = compact ? 38 : 40;
@@ -46,6 +50,8 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
         },
         pressed && styles.cardPressed,
       ]}
+      accessibilityRole="button"
+      accessibilityLabel={`Открыть карточку ${workshop.title}`}
     >
       <View style={[styles.cover, { height: coverHeight, borderRadius: compact ? 18 : 22 }]}>
         {coverPhoto ? (
@@ -78,7 +84,10 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
       <View style={[styles.header, { gap: compact ? 8 : 12 }]}>
         <View style={styles.titleWrap}>
           <View style={styles.titleRow}>
-            <Text style={[styles.title, { fontSize: layout.font(18, 0.25, 16, 19) }]}>
+            <Text
+              numberOfLines={2}
+              style={[styles.title, { fontSize: layout.font(18, 0.25, 16, 19) }]}
+            >
               {workshop.title}
             </Text>
             {workshop.isVerifiedMaster ? (
@@ -88,7 +97,7 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
               </View>
             ) : null}
           </View>
-          <Text style={styles.subtitle}>
+          <Text numberOfLines={2} style={styles.subtitle}>
             {workshop.city} • {workshop.addressLine}
             {typeof workshop.distanceMeters === 'number'
               ? ` • ${formatDistance(workshop.distanceMeters)}`
@@ -115,6 +124,9 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
                 styles.locationButton,
                 { width: actionSize, height: actionSize, borderRadius: compact ? 13 : 14 },
               ]}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Открыть карту для ${workshop.title}`}
             >
               <Ionicons name="location-outline" size={iconSize} color={colors.accentDark} />
             </Pressable>
@@ -139,6 +151,8 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
                 pressed && styles.buttonPressed,
                 favoriteAction.disabled && styles.favoriteButtonDisabled,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={favoriteAction.label}
             >
               <Ionicons
                 name={favoriteAction.isDanger ? 'heart' : 'heart-outline'}
@@ -166,26 +180,33 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
         {workshop.description}
       </Text>
 
-      <View style={styles.quickActions}>
-        <Pressable
-          onPress={(event) => {
-            event.stopPropagation();
-            void Linking.openURL(`tel:${workshop.phone}`);
-          }}
-          style={({ pressed }) => [
-            styles.phoneButton,
-            { width: actionSize + 8, height: actionSize + 8, borderRadius: compact ? 16 : 17 },
-            pressed && styles.buttonPressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={`Позвонить мастеру ${workshop.phone}`}
-        >
-          <Ionicons name="call" size={compact ? 19 : 20} color="#FFFFFF" />
-        </Pressable>
-      </View>
+      {hasPhone ? (
+        <View style={styles.quickActions}>
+          <Pressable
+            onPress={(event) => {
+              event.stopPropagation();
+              void callPhone(workshop.phone).then((result) => {
+                if (!result.ok) {
+                  showError(result.title, result.message);
+                }
+              });
+            }}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.phoneButton,
+              { width: actionSize + 8, height: actionSize + 8, borderRadius: compact ? 16 : 17 },
+              pressed && styles.buttonPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Позвонить мастеру"
+          >
+            <Ionicons name="call" size={compact ? 19 : 20} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.chips}>
-        {workshop.categories.slice(0, 3).map((category) => (
+        {visibleCategories.map((category) => (
           <View
             key={category.id}
             style={[
@@ -207,6 +228,16 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
             </Text>
           </View>
         ))}
+        {hiddenCategoriesCount ? (
+          <View style={[styles.chip, styles.moreChip]}>
+            <Text style={[styles.chipText, styles.moreChipText]}>+{hiddenCategoriesCount}</Text>
+          </View>
+        ) : null}
+        {!workshop.categories.length ? (
+          <View style={[styles.chip, styles.moreChip]}>
+            <Text style={[styles.chipText, styles.moreChipText]}>Без категории</Text>
+          </View>
+        ) : null}
       </View>
 
       <Text style={styles.meta}>
@@ -290,6 +321,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: colors.text,
+    flexShrink: 1,
   },
   verifiedBadge: {
     flexDirection: 'row',
@@ -384,6 +416,12 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontSize: 12,
     fontWeight: '600',
+  },
+  moreChip: {
+    backgroundColor: '#F6F7F8',
+  },
+  moreChipText: {
+    color: colors.muted,
   },
   meta: {
     color: colors.muted,

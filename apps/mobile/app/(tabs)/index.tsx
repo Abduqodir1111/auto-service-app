@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Easing,
   Keyboard,
@@ -26,6 +25,7 @@ import { WorkshopCard } from '../../components/workshop-card';
 import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
+import { showError } from '../../src/store/feedback-store';
 import { useAuthStore } from '../../src/store/auth-store';
 import { type Coordinates, getDeviceCoordinates } from '../../src/utils/device-location';
 import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
@@ -120,7 +120,7 @@ export default function CatalogScreen() {
     },
     onError: (_error, workshop, context) => {
       context?.rollback?.();
-      Alert.alert(
+      showError(
         'Не удалось обновить избранное',
         workshop.isFavorite
           ? 'Не получилось убрать объявление из избранного. Попробуйте ещё раз.'
@@ -137,6 +137,7 @@ export default function CatalogScreen() {
   });
 
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
+  const workshopItems = workshopsQuery.data ?? [];
   const searchButtonSize = layout.isSmallPhone ? 44 : 48;
   const expandedSearchWidth = Math.min(layout.contentWidth, layout.isTablet ? 480 : 420);
   const topSpacing = Math.max(insets.top + (layout.isSmallPhone ? 2 : 6), layout.isSmallPhone ? 20 : 24);
@@ -372,19 +373,19 @@ export default function CatalogScreen() {
           />
         }
       >
-        {workshopsQuery.isLoading ? (
+        {workshopsQuery.isLoading && !workshopItems.length ? (
           <>
             <WorkshopCardSkeleton />
             <WorkshopCardSkeleton />
             <WorkshopCardSkeleton />
           </>
-        ) : workshopsQuery.isError ? (
+        ) : workshopsQuery.isError && !workshopItems.length ? (
           <RetryState
             onRetry={() => void Promise.all([workshopsQuery.refetch(), categoriesQuery.refetch()])}
             loading={workshopsQuery.isRefetching || categoriesQuery.isRefetching}
           />
-        ) : (workshopsQuery.data ?? []).length ? (
-          (workshopsQuery.data ?? []).map((workshop) => (
+        ) : workshopItems.length ? (
+          workshopItems.map((workshop) => (
             <WorkshopCard
               key={workshop.id}
               workshop={workshop}

@@ -4,10 +4,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Easing,
-  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -20,6 +18,8 @@ import { haversineKm } from '../../components/call-status-banner';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
+import { showError, showSuccess } from '../../src/store/feedback-store';
+import { callPhone } from '../../src/utils/linking-actions';
 
 const POLL_INTERVAL_MS = 2_000;
 
@@ -92,7 +92,7 @@ export default function CallStatusScreen() {
       await api.post(`/service-calls/${id}/cancel`);
     },
     onSuccess: () => {
-      Alert.alert('Вызов отменён');
+      showSuccess('Вызов отменён');
       router.back();
     },
   });
@@ -102,7 +102,7 @@ export default function CallStatusScreen() {
       await api.post(`/service-calls/${id}/complete`);
     },
     onSuccess: () => {
-      Alert.alert('Спасибо!', 'Вызов завершён.');
+      showSuccess('Спасибо!', 'Вызов завершён.');
       router.back();
     },
   });
@@ -115,12 +115,12 @@ export default function CallStatusScreen() {
       });
     },
     onSuccess: () => {
-      Alert.alert('Жалоба отправлена', 'Администраторы рассмотрят её в ближайшее время.');
+      showSuccess('Жалоба отправлена', 'Администраторы рассмотрят её в ближайшее время.');
       setShowComplaint(false);
       router.back();
     },
     onError: () => {
-      Alert.alert('Ошибка', 'Не удалось отправить жалобу. Попробуйте ещё раз.');
+      showError('Ошибка', 'Не удалось отправить жалобу. Попробуйте ещё раз.');
     },
   });
 
@@ -255,8 +255,16 @@ export default function CallStatusScreen() {
       />
 
       <Pressable
-        onPress={() => master?.phone && Linking.openURL(`tel:${master.phone}`)}
+        onPress={() =>
+          void callPhone(master?.phone).then((result) => {
+            if (!result.ok) {
+              showError(result.title, result.message);
+            }
+          })
+        }
         style={styles.primaryButton}
+        accessibilityRole="button"
+        accessibilityLabel={`Позвонить мастеру ${master?.phone ?? ''}`}
       >
         <Ionicons name="call" size={20} color="#FFFFFF" />
         <Text style={styles.primaryText}>Позвонить мастеру</Text>

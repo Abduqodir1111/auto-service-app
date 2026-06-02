@@ -1,22 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import * as Linking from 'expo-linking';
 import axios from 'axios';
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { ReportTargetType, UserRole, WorkshopDetails } from '@stomvp/shared';
+import type { ReviewItem } from '@stomvp/shared';
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
 import { WorkshopDetailSkeleton } from '../../components/skeleton';
-import { AppButton } from '../../components/ui';
+import { AppButton, RetryState } from '../../components/ui';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
+import { showConfirm, showError, showSuccess, showWarning } from '../../src/store/feedback-store';
 import { useAuthStore } from '../../src/store/auth-store';
 import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
-import { openExternalMap } from '../../src/utils/maps';
+import { callPhone, openRoute, triggerImpact } from '../../src/utils/linking-actions';
 import { createLeafletHtml } from '../../src/utils/leaflet-html';
 import { track } from '../../src/utils/analytics';
 import { clamp, useResponsive } from '../../src/utils/responsive';
@@ -33,6 +34,199 @@ function getApiErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+const ratingValues = [1, 2, 3, 4, 5];
+const ratingDistributionValues = [5, 4, 3, 2, 1];
+
+function getRatingCaption(rating: number) {
+  if (rating >= 5) return 'Отлично';
+  if (rating === 4) return 'Хорошо';
+  if (rating === 3) return 'Нормально';
+  if (rating === 2) return 'Есть проблемы';
+  return 'Плохо';
+}
+
+function formatReviewCount(count: number) {
+  const lastDigit = count % 10;
+  const lastTwoDigits = count % 100;
+
+  if (lastDigit === 1 && lastTwoDigits !== 11) {
+    return `${count} отзыв`;
+  }
+
+  if (lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 12 || lastTwoDigits > 14)) {
+    return `${count} отзыва`;
+  }
+
+  return `${count} отзывов`;
+}
+
+function formatClientReviewCount(count: number) {
+  const base = formatReviewCount(count);
+  const lastDigit = count % 10;
+  const lastTwoDigits = count % 100;
+  const clientWord = lastDigit === 1 && lastTwoDigits !== 11 ? 'клиента' : 'клиентов';
+
+  return `${base} ${clientWord}`;
+}
+
+function formatReviewDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  if (!parts.length) {
+    return 'К';
+  }
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+}
+
+function InlineStars({ rating, size = 14 }: { rating: number; size?: number }) {
+  return (
+    <View style={styles.inlineStars}>
+      {ratingValues.map((value) => (
+        <Ionicons
+          key={value}
+          name={value <= Math.round(rating) ? 'star' : 'star-outline'}
+          size={size}
+          color={colors.warning}
+        />
+      ))}
+    </View>
+  );
+}
+
+function AnimatedRatingStar({
+  value,
+  active,
+  selected,
+  onPress,
+}: {
+  value: number;
+  active: boolean;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(active ? 1 : 0.92)).current;
+  const glow = useRef(new Animated.Value(active ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: selected ? 1.14 : active ? 1 : 0.92,
+        friction: 5,
+        tension: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(glow, {
+        toValue: active ? 1 : 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [active, glow, scale, selected]);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [
+        styles.ratingStarButton,
+        active && styles.ratingStarButtonActive,
+        pressed && styles.buttonPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`Поставить оценку ${value} из 5`}
+      accessibilityState={{ selected: active }}
+    >
+      <Animated.View style={[styles.ratingStarGlow, { opacity: glow }]} />
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Ionicons
+          name={active ? 'star' : 'star-outline'}
+          size={selected ? 30 : 28}
+          color={active ? '#FFFFFF' : colors.warning}
+        />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function ReviewCard({
+  review,
+  index,
+  onReport,
+  disabled,
+}: {
+  review: ReviewItem;
+  index: number;
+  onReport: () => void;
+  disabled: boolean;
+}) {
+  const enter = useRef(new Animated.Value(0)).current;
+  const translateY = enter.interpolate({
+    inputRange: [0, 1],
+    outputRange: [12, 0],
+  });
+
+  useEffect(() => {
+    Animated.timing(enter, {
+      toValue: 1,
+      duration: 260,
+      delay: Math.min(index * 45, 180),
+      useNativeDriver: true,
+    }).start();
+  }, [enter, index]);
+
+  const authorName = review.author.fullName || 'Клиент';
+
+  return (
+    <Animated.View style={[styles.review, { opacity: enter, transform: [{ translateY }] }]}>
+      <View style={styles.reviewHeader}>
+        <View style={styles.reviewAuthorRow}>
+          <View style={styles.reviewAvatar}>
+            <Text style={styles.reviewAvatarText}>{getInitials(authorName)}</Text>
+          </View>
+          <View style={styles.reviewAuthorCopy}>
+            <Text style={styles.serviceName}>{authorName}</Text>
+            <Text style={styles.reviewDate}>{formatReviewDate(review.createdAt)}</Text>
+          </View>
+        </View>
+        <View style={styles.reviewRatingBadge}>
+          <Ionicons name="star" size={13} color="#FFFFFF" />
+          <Text style={styles.reviewRatingBadgeText}>{review.rating}/5</Text>
+        </View>
+      </View>
+      <InlineStars rating={review.rating} />
+      <Text style={styles.reviewText}>{review.comment}</Text>
+      <Pressable
+        disabled={disabled}
+        onPress={onReport}
+        style={styles.reviewReportButton}
+        accessibilityRole="button"
+        accessibilityLabel="Пожаловаться на отзыв"
+      >
+        <Ionicons name="flag-outline" size={14} color={colors.accentDark} />
+        <Text style={styles.reviewReportText}>Жалоба</Text>
+      </Pressable>
+    </Animated.View>
+  );
 }
 
 export default function WorkshopDetailsScreen() {
@@ -63,6 +257,7 @@ export default function WorkshopDetailsScreen() {
 
   const workshopQuery = useQuery({
     queryKey: ['workshop', params.id],
+    enabled: Boolean(params.id),
     queryFn: async () => {
       const { data } = await api.get<WorkshopDetails>(`/workshops/${params.id}`);
       return data;
@@ -96,7 +291,7 @@ export default function WorkshopDetailsScreen() {
     },
     onError: (_error, _nextIsFavorite, context) => {
       context?.rollback?.();
-      Alert.alert('Не удалось обновить избранное', 'Попробуйте ещё раз.');
+      showError('Не удалось обновить избранное', 'Попробуйте ещё раз.');
     },
     onSuccess: async () => {
       await Promise.all([
@@ -118,6 +313,7 @@ export default function WorkshopDetailsScreen() {
       setReviewComment('');
       setReviewRating(5);
       setReviewNotice('Отзыв опубликован, а рейтинг карточки уже обновлён.');
+      showSuccess('Отзыв опубликован', 'Рейтинг карточки обновлён.');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['workshop', params.id] }),
         queryClient.invalidateQueries({ queryKey: ['workshops'] }),
@@ -126,7 +322,7 @@ export default function WorkshopDetailsScreen() {
       ]);
     },
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось отправить отзыв',
         getApiErrorMessage(
           error,
@@ -147,9 +343,10 @@ export default function WorkshopDetailsScreen() {
     },
     onSuccess: () => {
       setReportNotice('Жалоба отправлена модератору. Спасибо, что помогаете держать каталог чистым.');
+      showSuccess('Жалоба отправлена', 'Модератор проверит обращение.');
     },
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось отправить жалобу',
         getApiErrorMessage(error, 'Проверьте подключение и попробуйте ещё раз.'),
       );
@@ -160,6 +357,30 @@ export default function WorkshopDetailsScreen() {
   const canReview = session?.user.role === UserRole.CLIENT && session.user.id !== workshop?.ownerId;
   const isFavorite = workshop?.isFavorite ?? false;
   const hasCoordinates = workshop?.latitude != null && workshop.longitude != null;
+  const reviewStats = useMemo(() => {
+    const reviews = workshop?.reviews ?? [];
+    const total = reviews.length;
+    const average =
+      total > 0
+        ? reviews.reduce((sum, review) => sum + review.rating, 0) / total
+        : workshop?.averageRating ?? 0;
+
+    return {
+      average,
+      total,
+      distribution: ratingDistributionValues.map((rating) => {
+        const count = reviews.filter((review) => review.rating === rating).length;
+
+        return {
+          rating,
+          count,
+          percent: total > 0 ? Math.round((count / total) * 100) : 0,
+        };
+      }),
+    };
+  }, [workshop?.averageRating, workshop?.reviews]);
+  const reviewCommentLength = reviewComment.trim().length;
+  const canSubmitReview = reviewCommentLength >= 6 && !reviewMutation.isPending;
   const locationHtml = useMemo(() => {
     if (!hasCoordinates || !workshop) {
       return null;
@@ -191,6 +412,8 @@ export default function WorkshopDetailsScreen() {
                 borderRadius: compact ? 14 : 16,
               },
             ]}
+            accessibilityRole="button"
+            accessibilityLabel="Назад"
           >
             <Ionicons name="chevron-back" size={compact ? 22 : 24} color={colors.text} />
           </Pressable>
@@ -199,7 +422,16 @@ export default function WorkshopDetailsScreen() {
           </Text>
           <View style={{ width: topBarButtonSize, height: topBarButtonSize }} />
         </View>
-        <WorkshopDetailSkeleton />
+        {workshopQuery.isError ? (
+          <RetryState
+            title="Карточка не загрузилась"
+            text="Проверьте интернет или попробуйте открыть объявление ещё раз."
+            onRetry={() => void workshopQuery.refetch()}
+            loading={workshopQuery.isRefetching}
+          />
+        ) : (
+          <WorkshopDetailSkeleton />
+        )}
       </Screen>
     );
   }
@@ -208,23 +440,22 @@ export default function WorkshopDetailsScreen() {
 
   const submitReport = (targetType: ReportTargetType, targetId: string, label: string) => {
     if (!session) {
-      Alert.alert('Нужен вход', 'Чтобы отправить жалобу, войдите в аккаунт.');
+      showWarning('Нужен вход', 'Чтобы отправить жалобу, войдите в аккаунт.');
       return;
     }
 
-    Alert.alert('Отправить жалобу?', `Модератор проверит: ${label}.`, [
-      { text: 'Отмена', style: 'cancel' },
-      {
-        text: 'Отправить',
-        onPress: () =>
-          reportMutation.mutate({
-            targetType,
-            targetId,
-            reason: label,
-            comment: `Пользователь сообщил о проблеме: ${label}`,
-          }),
-      },
-    ]);
+    showConfirm({
+      title: 'Отправить жалобу?',
+      message: `Модератор проверит: ${label}.`,
+      confirmLabel: 'Отправить',
+      onConfirm: () =>
+        reportMutation.mutate({
+          targetType,
+          targetId,
+          reason: label,
+          comment: `Пользователь сообщил о проблеме: ${label}`,
+        }),
+    });
   };
 
   return (
@@ -236,7 +467,13 @@ export default function WorkshopDetailsScreen() {
       footer={
         <View style={[styles.stickyActions, compact && styles.stickyActionsCompact]}>
           <Pressable
-            onPress={() => Linking.openURL(`tel:${workshop.phone}`)}
+            onPress={() =>
+              void callPhone(workshop.phone).then((result) => {
+                if (!result.ok) {
+                  showError(result.title, result.message);
+                }
+              })
+            }
             style={({ pressed }) => [
               styles.stickyCallButton,
               pressed && styles.buttonPressed,
@@ -258,11 +495,15 @@ export default function WorkshopDetailsScreen() {
                   return;
                 }
 
-                void openExternalMap(
+                void openRoute(
                   workshop.latitude as number,
                   workshop.longitude as number,
                   workshop.title,
-                );
+                ).then((result) => {
+                  if (!result.ok) {
+                    showError(result.title, result.message);
+                  }
+                });
               }}
             />
           </View>
@@ -292,6 +533,8 @@ export default function WorkshopDetailsScreen() {
               borderRadius: compact ? 14 : 16,
             },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Назад"
         >
           <Ionicons name="chevron-back" size={compact ? 22 : 24} color={colors.text} />
         </Pressable>
@@ -342,6 +585,8 @@ export default function WorkshopDetailsScreen() {
               <Pressable
                 onPress={() => setSelectedPhotoUrl(photo.url)}
                 style={styles.heroPhotoOpenButton}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`Увеличить фото ${workshop.title}`}
               >
                 <Image
                   source={{ uri: photo.url }}
@@ -361,6 +606,8 @@ export default function WorkshopDetailsScreen() {
                   submitReport(ReportTargetType.PHOTO, photo.id, 'Проблема с фото')
                 }
                 style={styles.photoReportButton}
+                accessibilityRole="button"
+                accessibilityLabel="Пожаловаться на фото"
               >
                 <Ionicons name="flag-outline" size={16} color={colors.accentDark} />
               </Pressable>
@@ -423,7 +670,13 @@ export default function WorkshopDetailsScreen() {
                 </Text>
               </View>
               <Pressable
-                onPress={() => Linking.openURL(`tel:${workshop.phone}`)}
+                onPress={() =>
+                  void callPhone(workshop.phone).then((result) => {
+                    if (!result.ok) {
+                      showError(result.title, result.message);
+                    }
+                  })
+                }
                 style={styles.photoModalPhoneButton}
                 accessibilityRole="button"
                 accessibilityLabel={`Позвонить мастеру ${workshop.phone}`}
@@ -443,15 +696,23 @@ export default function WorkshopDetailsScreen() {
             <Text style={styles.contactPhone}>{workshop.phone}</Text>
           </View>
           <Pressable
-            onPress={() => Linking.openURL(`tel:${workshop.phone}`)}
+            onPress={() =>
+              void callPhone(workshop.phone).then((result) => {
+                if (!result.ok) {
+                  showError(result.title, result.message);
+                }
+              })
+            }
             style={styles.phoneIconButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Позвонить мастеру ${workshop.phone}`}
           >
             <Ionicons name="call" size={22} color="#FFFFFF" />
           </Pressable>
         </View>
         <Text style={styles.meta}>График: {workshop.openingHours || 'Уточняйте по телефону'}</Text>
         <Text style={styles.meta}>
-          Рейтинг {workshop.averageRating.toFixed(1)} • {workshop.reviewsCount} отзывов
+          Рейтинг {workshop.averageRating.toFixed(1)} • {formatReviewCount(workshop.reviewsCount)}
         </Text>
         {workshop.isVerifiedMaster ? (
           <Text style={styles.verifiedText}>
@@ -477,6 +738,8 @@ export default function WorkshopDetailsScreen() {
                 })
               }
               style={styles.locationChip}
+              accessibilityRole="button"
+              accessibilityLabel="Открыть карту мастерской"
             >
               <Ionicons name="location-outline" size={16} color={colors.accentDark} />
               <Text style={styles.locationChipText}>Открыть карту</Text>
@@ -503,6 +766,8 @@ export default function WorkshopDetailsScreen() {
                 })
               }
               style={styles.locationMapPreview}
+              accessibilityRole="button"
+              accessibilityLabel="Открыть карту мастерской"
             >
               <WebView
                 pointerEvents="none"
@@ -513,13 +778,19 @@ export default function WorkshopDetailsScreen() {
             </Pressable>
             <Pressable
               onPress={() =>
-                openExternalMap(
+                openRoute(
                   workshop.latitude as number,
                   workshop.longitude as number,
                   workshop.title,
-                )
+                ).then((result) => {
+                  if (!result.ok) {
+                    showError(result.title, result.message);
+                  }
+                })
               }
               style={styles.routeButton}
+              accessibilityRole="button"
+              accessibilityLabel={`Построить маршрут до ${workshop.title}`}
             >
               <Ionicons name="navigate" size={18} color="#FFFFFF" />
               <Text style={styles.primaryText}>Построить маршрут</Text>
@@ -557,6 +828,8 @@ export default function WorkshopDetailsScreen() {
             pressed && !favoriteMutation.isPending && styles.buttonPressed,
             favoriteMutation.isPending && styles.disabledButton,
           ]}
+          accessibilityRole="button"
+          accessibilityLabel={isFavorite ? 'Убрать из избранного' : 'Добавить в избранное'}
         >
           <Ionicons
             name={isFavorite ? 'heart' : 'heart-outline'}
@@ -575,6 +848,8 @@ export default function WorkshopDetailsScreen() {
           submitReport(ReportTargetType.WORKSHOP, workshop.id, 'Проблема с объявлением')
         }
         style={styles.reportButton}
+        accessibilityRole="button"
+        accessibilityLabel="Пожаловаться на объявление"
       >
         <Ionicons name="flag-outline" size={18} color={colors.accentDark} />
         <Text style={styles.reportButtonText}>
@@ -584,36 +859,79 @@ export default function WorkshopDetailsScreen() {
 
       {reportNotice ? <Text style={styles.reportNotice}>{reportNotice}</Text> : null}
 
-      <View style={[styles.card, cardAdaptiveStyle]}>
-        <Text style={styles.sectionTitle}>Отзывы</Text>
+      <View style={[styles.card, styles.reviewsCard, cardAdaptiveStyle]}>
+        <View style={styles.reviewsTop}>
+          <View style={styles.reviewsTitleWrap}>
+            <Text style={styles.sectionTitle}>Отзывы клиентов</Text>
+            <Text style={styles.reviewsSubtitle}>
+              {reviewStats.total
+                ? formatClientReviewCount(reviewStats.total)
+                : 'Пока без оценок'}
+            </Text>
+          </View>
+          <View style={styles.ratingSummaryBadge}>
+            <Ionicons name="star" size={18} color="#FFFFFF" />
+            <Text style={styles.ratingSummaryValue}>{reviewStats.average.toFixed(1)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.ratingOverview}>
+          <View style={styles.ratingScorePanel}>
+            <Text style={styles.ratingScore}>{reviewStats.average.toFixed(1)}</Text>
+            <InlineStars rating={reviewStats.average} size={16} />
+            <Text style={styles.ratingScoreCaption}>{formatReviewCount(reviewStats.total)}</Text>
+          </View>
+          <View style={styles.ratingBars}>
+            {reviewStats.distribution.map((item) => (
+              <View key={item.rating} style={styles.ratingBarRow}>
+                <Text style={styles.ratingBarLabel}>{item.rating}</Text>
+                <View style={styles.ratingBarTrack}>
+                  <View style={[styles.ratingBarFill, { width: `${item.percent}%` }]} />
+                </View>
+                <Text style={styles.ratingBarCount}>{item.count}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
         {canReview ? (
           <View style={styles.reviewComposer}>
-            <Text style={styles.reviewComposerTitle}>Оставить отзыв</Text>
-            <Text style={styles.meta}>
-              Поставьте оценку и напишите комментарий. Отзыв и рейтинг появятся сразу.
-            </Text>
+            <View style={styles.reviewComposerHeader}>
+              <View style={styles.reviewComposerIcon}>
+                <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.accentDark} />
+              </View>
+              <View style={styles.reviewComposerCopy}>
+                <Text style={styles.reviewComposerTitle}>Оставить отзыв</Text>
+                <Text style={styles.reviewComposerSubtitle}>
+                  Рейтинг обновится сразу после отправки.
+                </Text>
+              </View>
+            </View>
 
             <View style={styles.ratingRow}>
-              {[1, 2, 3, 4, 5].map((value) => {
+              {ratingValues.map((value) => {
                 const active = value <= reviewRating;
+                const selected = value === reviewRating;
 
                 return (
-                  <Pressable
+                  <AnimatedRatingStar
                     key={value}
-                    onPress={() => setReviewRating(value)}
-                    style={[styles.ratingChip, active && styles.ratingChipActive]}
-                  >
-                    <Ionicons
-                      name={active ? 'star' : 'star-outline'}
-                      size={18}
-                      color={active ? '#FFFFFF' : colors.warning}
-                    />
-                    <Text style={[styles.ratingChipText, active && styles.ratingChipTextActive]}>
-                      {value}
-                    </Text>
-                  </Pressable>
+                    value={value}
+                    active={active}
+                    selected={selected}
+                    onPress={() => {
+                      setReviewNotice(null);
+                      setReviewRating(value);
+                      void triggerImpact();
+                    }}
+                  />
                 );
               })}
+            </View>
+            <View style={styles.ratingChoiceLine}>
+              <Text style={styles.ratingChoiceText}>
+                {reviewRating}/5 • {getRatingCaption(reviewRating)}
+              </Text>
             </View>
 
             <Field
@@ -625,18 +943,21 @@ export default function WorkshopDetailsScreen() {
                 setReviewComment(value);
               }}
               placeholder="Например: быстро приняли, всё объяснили и сделали аккуратно."
+              maxLength={360}
             />
+            <Text style={styles.reviewCounter}>{reviewComment.length}/360</Text>
 
             {reviewNotice ? <Text style={styles.reviewNotice}>{reviewNotice}</Text> : null}
 
             <Pressable
-              disabled={reviewMutation.isPending || reviewComment.trim().length < 6}
+              disabled={!canSubmitReview}
               onPress={() => reviewMutation.mutate()}
               style={[
                 styles.primaryButton,
-                (reviewMutation.isPending || reviewComment.trim().length < 6) &&
-                  styles.disabledButton,
+                !canSubmitReview && styles.disabledButton,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Отправить отзыв"
             >
               <Text style={styles.primaryText}>
                 {reviewMutation.isPending ? 'Отправляем отзыв...' : 'Отправить отзыв'}
@@ -646,30 +967,29 @@ export default function WorkshopDetailsScreen() {
         ) : null}
 
         {workshop.reviews.length ? (
-          workshop.reviews.map((review) => (
-            <View key={review.id} style={styles.review}>
-              <View style={styles.reviewHeader}>
-                <Text style={styles.serviceName}>{review.author.fullName}</Text>
-                <Pressable
-                  disabled={reportMutation.isPending}
-                  onPress={() =>
-                    submitReport(ReportTargetType.REVIEW, review.id, 'Проблема с отзывом')
-                  }
-                  style={styles.reviewReportButton}
-                >
-                  <Ionicons name="flag-outline" size={14} color={colors.accentDark} />
-                  <Text style={styles.reviewReportText}>Жалоба</Text>
-                </Pressable>
-              </View>
-              <Text style={styles.meta}>Оценка {review.rating}/5</Text>
-              <Text style={styles.reviewText}>{review.comment}</Text>
-            </View>
-          ))
+          <View style={styles.reviewsList}>
+            {workshop.reviews.map((review, index) => (
+              <ReviewCard
+                key={review.id}
+                review={review}
+                index={index}
+                disabled={reportMutation.isPending}
+                onReport={() =>
+                  submitReport(ReportTargetType.REVIEW, review.id, 'Проблема с отзывом')
+                }
+              />
+            ))}
+          </View>
         ) : (
-          <Text style={styles.meta}>
-            Пока нет опубликованных отзывов. Потяните экран вниз, чтобы обновить карточку после
-            модерации.
-          </Text>
+          <View style={styles.emptyReviews}>
+            <Ionicons name="sparkles-outline" size={22} color={colors.accentDark} />
+            <View style={styles.emptyReviewsCopy}>
+              <Text style={styles.emptyReviewsTitle}>Отзывов пока нет</Text>
+              <Text style={styles.meta}>
+                Первый отзыв поможет другим клиентам быстрее выбрать мастера.
+              </Text>
+            </View>
+          </View>
         )}
       </View>
     </Screen>
@@ -967,11 +1287,116 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '700',
   },
-  review: {
-    paddingVertical: 8,
+  reviewsCard: {
+    overflow: 'hidden',
+  },
+  reviewsTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  reviewsTitleWrap: {
+    flex: 1,
     gap: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+  },
+  reviewsSubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  ratingSummaryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: colors.warning,
+    shadowColor: colors.warning,
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  ratingSummaryValue: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  ratingOverview: {
+    flexDirection: 'row',
+    gap: 14,
+    padding: 14,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceWarning,
+    borderWidth: 1,
+    borderColor: colors.borderWarning,
+  },
+  ratingScorePanel: {
+    width: 94,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+  },
+  ratingScore: {
+    color: colors.text,
+    fontSize: 34,
+    fontWeight: '900',
+  },
+  ratingScoreCaption: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  ratingBars: {
+    flex: 1,
+    gap: 7,
+  },
+  ratingBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ratingBarLabel: {
+    width: 10,
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ratingBarTrack: {
+    flex: 1,
+    height: 8,
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 253, 249, 0.78)',
+  },
+  ratingBarFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: colors.warning,
+  },
+  ratingBarCount: {
+    width: 20,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  inlineStars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  review: {
+    gap: 10,
+    padding: 14,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   reviewHeader: {
     flexDirection: 'row',
@@ -979,7 +1404,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
+  reviewAuthorRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  reviewAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceWarm,
+    borderWidth: 1,
+    borderColor: colors.borderWarm,
+  },
+  reviewAvatarText: {
+    color: colors.accentDark,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  reviewAuthorCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  reviewDate: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reviewRatingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: colors.warning,
+  },
+  reviewRatingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
   reviewReportButton: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -999,43 +1469,114 @@ const styles = StyleSheet.create({
   },
   reviewComposer: {
     gap: 12,
-    paddingBottom: 8,
+    padding: 14,
+    borderRadius: 22,
+    backgroundColor: colors.surfaceSuccess,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+  },
+  reviewComposerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  reviewComposerIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+  },
+  reviewComposerCopy: {
+    flex: 1,
+    gap: 3,
   },
   reviewComposerTitle: {
     fontSize: 16,
     fontWeight: '800',
     color: colors.text,
   },
+  reviewComposerSubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   ratingRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
   },
-  ratingChip: {
-    flexDirection: 'row',
+  ratingStarButton: {
+    flex: 1,
+    maxWidth: 54,
+    minHeight: 48,
+    aspectRatio: 1,
+    overflow: 'hidden',
+    borderRadius: 18,
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: '#FFF6E3',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#F0D9A7',
+    borderColor: colors.borderWarning,
   },
-  ratingChipActive: {
+  ratingStarButtonActive: {
     backgroundColor: colors.warning,
     borderColor: colors.warning,
   },
-  ratingChipText: {
-    color: colors.warning,
-    fontWeight: '700',
+  ratingStarGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
-  ratingChipTextActive: {
-    color: '#FFFFFF',
+  ratingChoiceLine: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+  },
+  ratingChoiceText: {
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  reviewCounter: {
+    alignSelf: 'flex-end',
+    marginTop: -8,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
   },
   reviewNotice: {
     color: colors.success,
     lineHeight: 20,
+    fontWeight: '800',
+  },
+  reviewsList: {
+    gap: 10,
+  },
+  emptyReviews: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceWarm,
+    borderWidth: 1,
+    borderColor: colors.borderWarm,
+  },
+  emptyReviewsCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  emptyReviewsTitle: {
+    color: colors.text,
+    fontWeight: '900',
   },
   disabledButton: {
     opacity: 0.55,

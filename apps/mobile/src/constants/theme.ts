@@ -10,6 +10,15 @@ export const colors = {
   warning: '#D39528',
   danger: '#C95340',
   border: 'rgba(24, 33, 32, 0.12)',
+  surfaceNeutral: '#F6F7F8',
+  surfaceWarm: '#FFF0E5',
+  surfaceWarning: '#FFF7DD',
+  surfaceDanger: '#FFF4F0',
+  surfaceSuccess: '#EAF4F1',
+  borderWarm: '#F1D1BC',
+  borderWarning: '#EEDDAB',
+  borderDanger: '#E7B5A9',
+  borderSuccess: '#D7ECE5',
 };
 
 export const spacing = {

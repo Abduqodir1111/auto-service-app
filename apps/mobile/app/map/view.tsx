@@ -4,8 +4,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Screen } from '../../components/screen';
 import { colors } from '../../src/constants/theme';
+import { showError } from '../../src/store/feedback-store';
 import { createLeafletHtml } from '../../src/utils/leaflet-html';
-import { openExternalMap } from '../../src/utils/maps';
+import { openRoute } from '../../src/utils/linking-actions';
 
 export default function MapViewScreen() {
   const params = useLocalSearchParams<{
@@ -64,9 +65,15 @@ export default function MapViewScreen() {
 
       <Pressable
         onPress={() =>
-          openExternalMap(latitude, longitude, params.title || params.address || 'СТО')
+          void openRoute(latitude, longitude, params.title || params.address || 'СТО').then((result) => {
+            if (!result.ok) {
+              showError(result.title, result.message);
+            }
+          })
         }
         style={styles.primaryButton}
+        accessibilityRole="button"
+        accessibilityLabel="Открыть эту точку в навигаторе"
       >
         <Text style={styles.primaryText}>Открыть в навигаторе</Text>
       </Pressable>

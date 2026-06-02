@@ -4,6 +4,7 @@ import { AuthUser, ServiceCallItem, ServiceCallStatus, UserRole } from '@stomvp/
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, AppState, View } from 'react-native';
+import { FeedbackHost, GlobalNetworkBanner } from '../components/ui';
 import { api, upgradeLegacySession } from '../src/api/client';
 import { colors } from '../src/constants/theme';
 import { useAuthStore } from '../src/store/auth-store';
@@ -234,39 +235,43 @@ function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Stack
-        screenOptions={{
-          headerStyle: {
-            backgroundColor: colors.background,
-          },
-          headerShadowVisible: false,
-          headerBackButtonDisplayMode: 'minimal',
-          headerTintColor: colors.text,
-          contentStyle: {
-            backgroundColor: colors.background,
-          },
-        }}
-      >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/sign-in" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/sign-up" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/sign-up-verify" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/forgot-password" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/forgot-password-verify" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/reset-password" options={{ headerShown: false }} />
-        <Stack.Screen name="workshop/[id]" options={{ title: 'Карточка СТО' }} />
-        <Stack.Screen name="map/picker" options={{ title: 'Точка на карте' }} />
-        <Stack.Screen name="map/view" options={{ title: 'Локация СТО' }} />
-        <Stack.Screen name="requests/create" options={{ title: 'Новая заявка' }} />
-        <Stack.Screen name="master/workshop" options={{ title: 'Объявление мастера' }} />
-        <Stack.Screen name="call/index" options={{ title: 'Вызвать мастера' }} />
-        <Stack.Screen name="call/[id]" options={{ title: 'Вызов', headerBackVisible: false }} />
-        <Stack.Screen
-          name="master/incoming-call/[id]"
-          options={{ title: 'Срочный вызов', headerShown: false, gestureEnabled: false }}
-        />
-      </Stack>
+      <View style={{ flex: 1 }}>
+        <Stack
+          screenOptions={{
+            headerStyle: {
+              backgroundColor: colors.background,
+            },
+            headerShadowVisible: false,
+            headerBackButtonDisplayMode: 'minimal',
+            headerTintColor: colors.text,
+            contentStyle: {
+              backgroundColor: colors.background,
+            },
+          }}
+        >
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/sign-in" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/sign-up" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/sign-up-verify" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/forgot-password" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/forgot-password-verify" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/reset-password" options={{ headerShown: false }} />
+          <Stack.Screen name="workshop/[id]" options={{ title: 'Карточка СТО' }} />
+          <Stack.Screen name="map/picker" options={{ title: 'Точка на карте' }} />
+          <Stack.Screen name="map/view" options={{ title: 'Локация СТО' }} />
+          <Stack.Screen name="requests/create" options={{ title: 'Новая заявка' }} />
+          <Stack.Screen name="master/workshop" options={{ title: 'Объявление мастера' }} />
+          <Stack.Screen name="call/index" options={{ title: 'Вызвать мастера' }} />
+          <Stack.Screen name="call/[id]" options={{ title: 'Вызов', headerBackVisible: false }} />
+          <Stack.Screen
+            name="master/incoming-call/[id]"
+            options={{ title: 'Срочный вызов', headerShown: false, gestureEnabled: false }}
+          />
+        </Stack>
+        <GlobalNetworkBanner />
+        <FeedbackHost />
+      </View>
     </QueryClientProvider>
   );
 }

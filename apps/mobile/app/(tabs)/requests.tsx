@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { UserRole, ApplicationStatus } from '@stomvp/shared';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -8,7 +7,9 @@ import { Screen } from '../../components/screen';
 import { EmptyState, NetworkBanner, RetryState, StatusPill } from '../../components/ui';
 import { api } from '../../src/api/client';
 import { colors, radius, spacing, typography } from '../../src/constants/theme';
+import { showError } from '../../src/store/feedback-store';
 import { useAuthStore } from '../../src/store/auth-store';
+import { callPhone } from '../../src/utils/linking-actions';
 import { useResponsive } from '../../src/utils/responsive';
 
 type ApplicationItem = {
@@ -84,6 +85,7 @@ export default function RequestsScreen() {
       await queryClient.invalidateQueries({ queryKey: ['applications', role] });
     },
   });
+  const requestItems = requestsQuery.data ?? [];
 
   return (
     <Screen
@@ -109,20 +111,20 @@ export default function RequestsScreen() {
 
       {requestsQuery.isError ? <NetworkBanner /> : null}
 
-      {requestsQuery.isLoading ? (
+      {requestsQuery.isLoading && !requestItems.length ? (
         <>
           <RequestCardSkeleton />
           <RequestCardSkeleton />
           <RequestCardSkeleton />
         </>
-      ) : requestsQuery.isError ? (
+      ) : requestsQuery.isError && !requestItems.length ? (
         <RetryState
           onRetry={() => void requestsQuery.refetch()}
           loading={requestsQuery.isRefetching}
         />
-      ) : (requestsQuery.data ?? []).length ? (
+      ) : requestItems.length ? (
         <View style={[styles.stack, { gap: compact ? 10 : 14 }]}>
-          {(requestsQuery.data ?? []).map((item) => {
+          {requestItems.map((item) => {
             const isUpdating = updateStatus.isPending && updateStatus.variables?.id === item.id;
 
             return (
@@ -155,7 +157,13 @@ export default function RequestsScreen() {
                     <Text style={styles.muted}>{item.customerPhone}</Text>
                   </View>
                   <Pressable
-                    onPress={() => void Linking.openURL(`tel:${item.customerPhone}`)}
+                    onPress={() =>
+                      void callPhone(item.customerPhone).then((result) => {
+                        if (!result.ok) {
+                          showError(result.title, result.message);
+                        }
+                      })
+                    }
                     style={({ pressed }) => [
                       styles.callButton,
                       pressed && styles.buttonPressed,
@@ -186,6 +194,8 @@ export default function RequestsScreen() {
                         (isUpdating || item.status === ApplicationStatus.IN_PROGRESS) &&
                           styles.disabledButton,
                       ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Перевести заявку в работу"
                     >
                       <Text style={styles.actionText}>В работу</Text>
                     </Pressable>
@@ -203,6 +213,8 @@ export default function RequestsScreen() {
                         (isUpdating || item.status === ApplicationStatus.COMPLETED) &&
                           styles.disabledButton,
                       ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Отметить заявку завершённой"
                     >
                       <Text style={styles.actionText}>Завершено</Text>
                     </Pressable>

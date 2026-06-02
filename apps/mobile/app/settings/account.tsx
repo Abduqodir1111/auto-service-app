@@ -3,11 +3,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
+import { showConfirm, showError, showSuccess } from '../../src/store/feedback-store';
 import { useAuthStore } from '../../src/store/auth-store';
 import { useResponsive } from '../../src/utils/responsive';
 
@@ -32,10 +33,10 @@ export default function AccountSettingsScreen() {
     onSuccess: () => {
       setCodeRequested(true);
       setSmsCode('');
-      Alert.alert('SMS отправлено', `Код подтверждения отправлен на ${session?.user.phone}.`);
+      showSuccess('SMS отправлено', `Код подтверждения отправлен на ${session?.user.phone}.`);
     },
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось отправить SMS',
         getApiErrorMessage(error, 'Проверьте подключение и попробуйте ещё раз.'),
       );
@@ -52,10 +53,10 @@ export default function AccountSettingsScreen() {
       queryClient.clear();
       await setSession(null);
       router.replace('/(auth)/sign-in');
-      Alert.alert('Аккаунт удалён', 'Ваш аккаунт и связанные данные удалены с сервера.');
+      showSuccess('Аккаунт удалён', 'Ваш аккаунт и связанные данные удалены с сервера.');
     },
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось удалить аккаунт',
         getApiErrorMessage(error, 'Проверьте SMS-код и попробуйте ещё раз.'),
       );
@@ -135,18 +136,13 @@ export default function AccountSettingsScreen() {
             <Pressable
               disabled={!canConfirm}
               onPress={() =>
-                Alert.alert(
-                  'Удалить аккаунт?',
-                  'После подтверждения аккаунт и связанные данные будут удалены навсегда.',
-                  [
-                    { text: 'Отмена', style: 'cancel' },
-                    {
-                      text: 'Удалить',
-                      style: 'destructive',
-                      onPress: () => confirmDeleteMutation.mutate(),
-                    },
-                  ],
-                )
+                showConfirm({
+                  title: 'Удалить аккаунт?',
+                  message: 'После подтверждения аккаунт и связанные данные будут удалены навсегда.',
+                  confirmLabel: 'Удалить',
+                  destructive: true,
+                  onConfirm: () => confirmDeleteMutation.mutate(),
+                })
               }
               style={[styles.deleteButton, !canConfirm && styles.disabledButton]}
             >

@@ -5,7 +5,6 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +19,7 @@ import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
+import { showError, showWarning } from '../../src/store/feedback-store';
 import { useMapPickerStore } from '../../src/store/map-picker-store';
 import { type Coordinates, getDeviceCoordinates } from '../../src/utils/device-location';
 import { createLeafletHtml } from '../../src/utils/leaflet-html';
@@ -100,7 +100,7 @@ export default function CallMasterScreen() {
         axios.isAxiosError(err) && typeof err.response?.data?.message === 'string'
           ? err.response.data.message
           : 'Не удалось создать вызов. Попробуйте ещё раз.';
-      Alert.alert('Ошибка', message);
+      showError('Ошибка', message);
     },
   });
 
@@ -170,6 +170,9 @@ export default function CallMasterScreen() {
                   key={category.id}
                   onPress={() => setCategoryId(category.id)}
                   style={[styles.chip, active && styles.chipActive]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Выбрать услугу ${category.name}`}
+                  accessibilityState={{ selected: active }}
                 >
                   <Ionicons
                     name={icon}
@@ -194,7 +197,12 @@ export default function CallMasterScreen() {
           <Text style={styles.sectionTitle}>Куда приехать?</Text>
         </View>
 
-        <Pressable onPress={openMapPicker} style={styles.mapCard}>
+        <Pressable
+          onPress={openMapPicker}
+          style={styles.mapCard}
+          accessibilityRole="button"
+          accessibilityLabel="Изменить точку вызова на карте"
+        >
           <WebView
             originWhitelist={['*']}
             source={{ html: mapPreviewHtml }}
@@ -215,13 +223,15 @@ export default function CallMasterScreen() {
             if (result.coordinates) {
               setCoords(result.coordinates);
             } else if (result.permissionDenied) {
-              Alert.alert(
+              showWarning(
                 'Нет доступа к геопозиции',
                 'Разрешите доступ к локации, чтобы быстро поставить точку рядом с вами.',
               );
             }
           }}
           style={styles.locateRow}
+          accessibilityRole="button"
+          accessibilityLabel="Поставить мою текущую точку"
         >
           <Ionicons name="locate" size={18} color={colors.accentDark} />
           <Text style={styles.locateText}>Поставить мою текущую точку</Text>
@@ -277,6 +287,8 @@ export default function CallMasterScreen() {
           pressed && canSubmit && styles.primaryButtonPressed,
           !canSubmit && styles.disabled,
         ]}
+        accessibilityRole="button"
+        accessibilityLabel="Вызвать ближайшего мастера"
       >
         {createMutation.isPending ? (
           <ActivityIndicator color="#FFFFFF" />

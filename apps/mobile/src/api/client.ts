@@ -1,6 +1,7 @@
 import { AuthPayload } from '@stomvp/shared';
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/auth-store';
+import { useNetworkStore } from '../store/network-store';
 
 const productionApiUrl = 'https://api.nedvigagregat.uz/api';
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -63,10 +64,17 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    useNetworkStore.getState().markOnline();
+    return response;
+  },
   async (error: AxiosError) => {
     const response = error.response;
     const originalRequest = error.config as RetriableRequestConfig | undefined;
+
+    if (!response) {
+      useNetworkStore.getState().markOffline();
+    }
 
     if (
       !response ||

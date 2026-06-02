@@ -12,10 +12,11 @@ import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
+import { isLikelyPhone, normalizePhoneForApi } from '../../src/utils/phone';
 import { useResponsive } from '../../src/utils/responsive';
 
 const schema = z.object({
-  phone: z.string().min(6, 'Введите телефон'),
+  phone: z.string().refine(isLikelyPhone, 'Введите телефон в формате +998 90 123 45 67'),
   password: z.string().min(6, 'Минимум 6 символов'),
 });
 
@@ -36,7 +37,10 @@ export default function SignInScreen() {
 
   const loginMutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      const { data } = await api.post<AuthPayload>('/auth/login', values);
+      const { data } = await api.post<AuthPayload>('/auth/login', {
+        ...values,
+        phone: normalizePhoneForApi(values.phone),
+      });
       return data;
     },
     onSuccess: async (payload) => {
@@ -51,7 +55,7 @@ export default function SignInScreen() {
       const apiMessage = loginMutation.error.response?.data?.message;
       if (typeof apiMessage === 'string') {
         return apiMessage === 'Invalid credentials'
-          ? 'Не удалось войти. Проверьте телефон и пароль.'
+          ? 'Не удалось войти. Проверьте номер в формате +998 и пароль.'
           : apiMessage;
       }
       return 'Нет связи с сервером. Проверьте Wi-Fi и доступность API.';

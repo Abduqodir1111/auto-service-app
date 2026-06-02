@@ -1,11 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -16,12 +14,15 @@ import {
 import { WebView } from 'react-native-webview';
 import { PaginatedResult, ServiceCategory, WorkshopSummary } from '@stomvp/shared';
 import { Screen } from '../../components/screen';
+import { NetworkBanner } from '../../components/ui';
 import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
+import { showError, showWarning } from '../../src/store/feedback-store';
 import { getDeviceCoordinates } from '../../src/utils/device-location';
 import { createWorkshopsLeafletHtml } from '../../src/utils/leaflet-html';
-import { getDefaultMapCoordinates, openExternalMap } from '../../src/utils/maps';
+import { callPhone, openRoute } from '../../src/utils/linking-actions';
+import { getDefaultMapCoordinates } from '../../src/utils/maps';
 import { useResponsive } from '../../src/utils/responsive';
 
 type MapMessage =
@@ -41,12 +42,44 @@ type Coordinates = {
   longitude: number;
 };
 
+const MAX_MAP_WORKSHOPS = 500;
+const NEARBY_RADIUS_METERS = 50_000;
+
+type WorkshopsMapResult = {
+  items: WorkshopSummary[];
+  limitReached: boolean;
+};
+
+function getDistanceMeters(from: Coordinates, to: Coordinates) {
+  const earthRadiusMeters = 6_371_000;
+  const fromLat = (from.latitude * Math.PI) / 180;
+  const toLat = (to.latitude * Math.PI) / 180;
+  const deltaLat = ((to.latitude - from.latitude) * Math.PI) / 180;
+  const deltaLng = ((to.longitude - from.longitude) * Math.PI) / 180;
+  const sinLat = Math.sin(deltaLat / 2);
+  const sinLng = Math.sin(deltaLng / 2);
+  const a = sinLat * sinLat + Math.cos(fromLat) * Math.cos(toLat) * sinLng * sinLng;
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(meters: number) {
+  if (meters < 1000) {
+    return `${Math.round(meters)} м`;
+  }
+
+  const km = meters / 1000;
+  return km < 10 ? `${km.toFixed(1)} км` : `${Math.round(km)} км`;
+}
+
 export default function MapTabScreen() {
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null);
   const [deviceLocation, setDeviceLocation] = useState<Coordinates | null>(null);
   const [mapCenter, setMapCenter] = useState<Coordinates | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [nearbyOnly, setNearbyOnly] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapLoadError, setMapLoadError] = useState(false);
   const filterRailRef = useRef<ScrollView>(null);
   const fallbackCenter = useMemo(() => getDefaultMapCoordinates(), []);
   const layout = useResponsive();
@@ -65,7 +98,7 @@ export default function MapTabScreen() {
 
   const workshopsQuery = useQuery({
     queryKey: ['workshops-map', categoryId],
-    queryFn: async () => {
+    queryFn: async (): Promise<WorkshopsMapResult> => {
       const allItems: WorkshopSummary[] = [];
       let page = 1;
       let pageCount = 1;
@@ -82,17 +115,37 @@ export default function MapTabScreen() {
         allItems.push(...data.data);
         pageCount = data.meta.pageCount;
         page += 1;
-      } while (page <= pageCount);
+      } while (page <= pageCount && allItems.length < MAX_MAP_WORKSHOPS);
 
-      return allItems;
+      return {
+        items: allItems.slice(0, MAX_MAP_WORKSHOPS),
+        limitReached: page <= pageCount || allItems.length > MAX_MAP_WORKSHOPS,
+      };
     },
   });
 
   const categories = categoriesQuery.data ?? [];
-  const workshops = workshopsQuery.data ?? [];
+  const workshops = workshopsQuery.data?.items ?? [];
+  const mapLimitReached = Boolean(workshopsQuery.data?.limitReached);
   const mapWorkshops = useMemo(
-    () => workshops.filter((workshop) => workshop.latitude != null && workshop.longitude != null),
-    [workshops],
+    () =>
+      workshops.filter((workshop) => {
+        if (workshop.latitude == null || workshop.longitude == null) {
+          return false;
+        }
+
+        if (!nearbyOnly || !deviceLocation) {
+          return true;
+        }
+
+        return (
+          getDistanceMeters(deviceLocation, {
+            latitude: workshop.latitude,
+            longitude: workshop.longitude,
+          }) <= NEARBY_RADIUS_METERS
+        );
+      }),
+    [deviceLocation, nearbyOnly, workshops],
   );
 
   useEffect(() => {
@@ -129,7 +182,7 @@ export default function MapTabScreen() {
   }: {
     forceCenter: boolean;
     silent?: boolean;
-  }) => {
+  }): Promise<Coordinates | null> => {
     try {
       setIsLocating(true);
 
@@ -141,12 +194,12 @@ export default function MapTabScreen() {
         }
 
         if (!silent && result.permissionDenied) {
-          Alert.alert(
+          showWarning(
             'Нет доступа к геопозиции',
             'Разрешите доступ к локации, чтобы показывать ваше место на карте.',
           );
         }
-        return;
+        return null;
       }
       const nextLocation = result.coordinates;
 
@@ -155,17 +208,20 @@ export default function MapTabScreen() {
       if (forceCenter || !mapCenter) {
         setMapCenter(nextLocation);
       }
+
+      return nextLocation;
     } catch {
       if (forceCenter && !mapCenter) {
         setMapCenter(fallbackCenter);
       }
 
       if (!silent) {
-        Alert.alert(
+        showError(
           'Не удалось определить геопозицию',
           'Проверьте доступ к геолокации и попробуйте ещё раз.',
         );
       }
+      return null;
     } finally {
       setIsLocating(false);
     }
@@ -179,6 +235,23 @@ export default function MapTabScreen() {
     () => mapWorkshops.find((workshop) => workshop.id === selectedWorkshopId) ?? null,
     [mapWorkshops, selectedWorkshopId],
   );
+  const selectedWorkshopDistance =
+    selectedWorkshop && deviceLocation && selectedWorkshop.latitude != null && selectedWorkshop.longitude != null
+      ? getDistanceMeters(deviceLocation, {
+          latitude: selectedWorkshop.latitude,
+          longitude: selectedWorkshop.longitude,
+        })
+      : null;
+
+  const handleNearbyPress = async () => {
+    if (nearbyOnly) {
+      setNearbyOnly(false);
+      return;
+    }
+
+    const location = await resolveDeviceLocation({ forceCenter: true });
+    setNearbyOnly(Boolean(location));
+  };
 
   const html = useMemo(
     () =>
@@ -282,13 +355,65 @@ export default function MapTabScreen() {
             </Pressable>
           );
         })}
+
+        <Pressable
+          onPress={() => void handleNearbyPress()}
+          disabled={isLocating}
+          style={[
+            styles.chip,
+            {
+              paddingHorizontal: compact ? 10 : 12,
+              paddingVertical: compact ? 7 : 8,
+            },
+            nearbyOnly && styles.chipActive,
+          ]}
+        >
+          {isLocating ? (
+            <ActivityIndicator color={nearbyOnly ? '#FFFFFF' : colors.accentDark} size="small" />
+          ) : (
+            <Ionicons
+              name="locate-outline"
+              size={chipIconSize}
+              color={nearbyOnly ? '#FFFFFF' : colors.accentDark}
+            />
+          )}
+          <Text
+            style={[
+              styles.chipText,
+              { fontSize: layout.font(13, 0.15, 12, 14) },
+              nearbyOnly && styles.chipTextActive,
+            ]}
+          >
+            Рядом
+          </Text>
+        </Pressable>
       </ScrollView>
+
+      {workshopsQuery.isError || categoriesQuery.isError ? <NetworkBanner /> : null}
+      {mapLimitReached ? (
+        <View style={styles.limitNotice}>
+          <Ionicons name="layers-outline" size={16} color={colors.accentDark} />
+          <Text style={styles.limitNoticeText}>
+            На карте показаны первые {MAX_MAP_WORKSHOPS} точек. Уточните категорию или включите
+            “Рядом”.
+          </Text>
+        </View>
+      ) : null}
 
       <View style={[styles.mapCard, { borderRadius: compact ? 18 : 24 }]}>
         <WebView
           originWhitelist={['*']}
           source={{ html }}
           style={styles.map}
+          onLoadStart={() => {
+            setMapReady(false);
+            setMapLoadError(false);
+          }}
+          onLoadEnd={() => setMapReady(true)}
+          onError={() => {
+            setMapLoadError(true);
+            setMapReady(false);
+          }}
           onMessage={(event) => {
             try {
               const payload = JSON.parse(event.nativeEvent.data) as MapMessage;
@@ -306,6 +431,34 @@ export default function MapTabScreen() {
             }
           }}
         />
+
+        {workshopsQuery.isLoading || (!mapReady && !mapLoadError) ? (
+          <View style={styles.mapStateOverlay}>
+            <ActivityIndicator color={colors.accent} />
+            <Text style={styles.mapStateTitle}>Загружаем карту</Text>
+          </View>
+        ) : null}
+
+        {workshopsQuery.isError || mapLoadError ? (
+          <View style={styles.mapStateOverlay}>
+            <Ionicons name="map-outline" size={28} color={colors.accentDark} />
+            <Text style={styles.mapStateTitle}>Карта не загрузилась</Text>
+            <Text style={styles.mapStateText}>
+              Проверьте интернет и попробуйте обновить точки на карте.
+            </Text>
+            <Pressable
+              onPress={() => {
+                setMapReady(false);
+                setMapLoadError(false);
+                void workshopsQuery.refetch();
+              }}
+              style={styles.mapRetryButton}
+            >
+              <Ionicons name="refresh-outline" size={16} color={colors.accentDark} />
+              <Text style={styles.mapRetryText}>Повторить</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <Pressable
           onPress={() => void resolveDeviceLocation({ forceCenter: true })}
@@ -381,6 +534,11 @@ export default function MapTabScreen() {
                   {selectedWorkshop.categories.slice(0, 2).map((item) => item.name).join(', ') ||
                     'Без категории'}
                 </Text>
+                {selectedWorkshopDistance != null ? (
+                  <Text style={styles.previewDistance}>
+                    Примерно {formatDistance(selectedWorkshopDistance)} от вас
+                  </Text>
+                ) : null}
                 {selectedWorkshop.isVerifiedMaster ? (
                   <View style={styles.previewVerified}>
                     <Ionicons name="shield-checkmark" size={12} color="#FFFFFF" />
@@ -392,7 +550,13 @@ export default function MapTabScreen() {
 
             <View style={[styles.previewActions, compact && styles.previewActionsCompact]}>
               <Pressable
-                onPress={() => void Linking.openURL(`tel:${selectedWorkshop.phone}`)}
+                onPress={() =>
+                  void callPhone(selectedWorkshop.phone).then((result) => {
+                    if (!result.ok) {
+                      showError(result.title, result.message);
+                    }
+                  })
+                }
                 style={({ pressed }) => [
                   styles.previewCallButton,
                   { height: compact ? 44 : 48, borderRadius: compact ? 15 : 17 },
@@ -405,11 +569,15 @@ export default function MapTabScreen() {
               </Pressable>
               <Pressable
                 onPress={() =>
-                  void openExternalMap(
+                  void openRoute(
                     selectedWorkshop.latitude as number,
                     selectedWorkshop.longitude as number,
                     selectedWorkshop.title,
-                  )
+                  ).then((result) => {
+                    if (!result.ok) {
+                      showError(result.title, result.message);
+                    }
+                  })
                 }
                 style={({ pressed }) => [
                   styles.previewRouteButton,
@@ -419,6 +587,8 @@ export default function MapTabScreen() {
                   },
                   pressed && styles.buttonPressed,
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Построить маршрут до ${selectedWorkshop.title}`}
               >
                 <Ionicons name="navigate" size={18} color={colors.accentDark} />
                 <Text style={styles.previewRouteText}>Маршрут</Text>
@@ -434,6 +604,8 @@ export default function MapTabScreen() {
                   },
                   pressed && styles.buttonPressed,
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Открыть карточку ${selectedWorkshop.title}`}
               >
                 <Text style={styles.primaryText}>Открыть</Text>
               </Pressable>
@@ -519,6 +691,62 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 13,
   },
+  limitNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#FFF7DD',
+    borderWidth: 1,
+    borderColor: '#EEDDAB',
+  },
+  limitNoticeText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  mapStateOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: 24,
+    backgroundColor: 'rgba(244, 239, 231, 0.92)',
+  },
+  mapStateTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  mapStateText: {
+    maxWidth: 260,
+    color: colors.muted,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  mapRetryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#FFF0E5',
+    borderWidth: 1,
+    borderColor: '#F1D1BC',
+  },
+  mapRetryText: {
+    color: colors.accentDark,
+    fontWeight: '800',
+  },
   previewOverlay: {
     position: 'absolute',
     left: 12,
@@ -567,6 +795,11 @@ const styles = StyleSheet.create({
   previewMeta: {
     color: colors.accentDark,
     fontWeight: '700',
+    fontSize: 12,
+  },
+  previewDistance: {
+    color: colors.success,
+    fontWeight: '800',
     fontSize: 12,
   },
   previewVerified: {

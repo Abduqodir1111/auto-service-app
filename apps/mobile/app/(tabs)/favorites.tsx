@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { WorkshopSummary } from '@stomvp/shared';
 import { Screen } from '../../components/screen';
 import { WorkshopCardSkeleton } from '../../components/skeleton';
@@ -10,6 +10,7 @@ import { EmptyState, NetworkBanner, RetryState } from '../../components/ui';
 import { WorkshopCard } from '../../components/workshop-card';
 import { api } from '../../src/api/client';
 import { colors, radius, spacing, typography } from '../../src/constants/theme';
+import { showError } from '../../src/store/feedback-store';
 import { syncFavoriteCaches } from '../../src/utils/favorites-cache';
 import { useResponsive } from '../../src/utils/responsive';
 
@@ -64,7 +65,7 @@ export default function FavoritesScreen() {
     },
     onError: (_error, _workshop, context) => {
       context?.rollback?.();
-      Alert.alert('Не удалось удалить из избранного', 'Попробуйте ещё раз.');
+      showError('Не удалось удалить из избранного', 'Попробуйте ещё раз.');
     },
     onSuccess: async (_data, workshop) => {
       await Promise.all([
@@ -119,6 +120,9 @@ export default function FavoritesScreen() {
                 active && styles.sortChipActive,
                 pressed && styles.buttonPressed,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Сортировать: ${option.label}`}
+              accessibilityState={{ selected: active }}
             >
               <Ionicons
                 name={option.icon}
@@ -133,12 +137,12 @@ export default function FavoritesScreen() {
         })}
       </View>
 
-      {favoritesQuery.isLoading ? (
+      {favoritesQuery.isLoading && !favorites.length ? (
         <>
           <WorkshopCardSkeleton />
           <WorkshopCardSkeleton />
         </>
-      ) : favoritesQuery.isError ? (
+      ) : favoritesQuery.isError && !favorites.length ? (
         <RetryState
           onRetry={() => void favoritesQuery.refetch()}
           loading={favoritesQuery.isRefetching}

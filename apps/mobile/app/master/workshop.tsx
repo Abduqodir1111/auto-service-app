@@ -13,7 +13,7 @@ import {
   useForm,
 } from 'react-hook-form';
 import {
-  Alert,
+  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -29,9 +29,11 @@ import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
+import { showActionSheet, showConfirm, showError, showSuccess } from '../../src/store/feedback-store';
 import { useMapPickerStore } from '../../src/store/map-picker-store';
 import { getDeviceCoordinates } from '../../src/utils/device-location';
-import { getDefaultMapCoordinates, openExternalMap } from '../../src/utils/maps';
+import { openRoute } from '../../src/utils/linking-actions';
+import { getDefaultMapCoordinates } from '../../src/utils/maps';
 import { useResponsive } from '../../src/utils/responsive';
 import { getWorkshopReadiness } from '../../src/utils/workshop-readiness';
 
@@ -388,9 +390,11 @@ export default function WorkshopEditorScreen() {
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session);
   const [savedWorkshopId, setSavedWorkshopId] = useState<string | null>(null);
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [scheduleFrom, setScheduleFrom] = useState('09:00');
   const [scheduleTo, setScheduleTo] = useState('18:00');
   const hydratedWorkshopIdRef = useRef<string | null>(null);
+  const draftSaveRunRef = useRef(0);
   const pickedLocation = useMapPickerStore((state) => state.selectedLocation);
   const setPickerInitialLocation = useMapPickerStore((state) => state.setPickerInitialLocation);
   const clearMapPickerState = useMapPickerStore((state) => state.clear);
@@ -564,8 +568,15 @@ export default function WorkshopEditorScreen() {
 
     const subscription = watch((values) => {
       const normalizedDraft = normalizeFormValues(values as Partial<FormValues>, registeredPhone);
+      const saveRunId = draftSaveRunRef.current + 1;
+      draftSaveRunRef.current = saveRunId;
+      setDraftStatus('saving');
       unsavedWorkshopDrafts.set(currentDraftKey, normalizedDraft);
-      void persistDraft(draftStorageUserId, currentDraftKey, normalizedDraft);
+      void persistDraft(draftStorageUserId, currentDraftKey, normalizedDraft).then(() => {
+        if (draftSaveRunRef.current === saveRunId) {
+          setDraftStatus('saved');
+        }
+      });
     });
 
     return () => subscription.unsubscribe();
@@ -659,9 +670,13 @@ export default function WorkshopEditorScreen() {
       if (locationDetails.addressLine) {
         setValue('addressLine', locationDetails.addressLine, { shouldDirty: true });
       }
+      showSuccess(
+        'Локация определена',
+        locationDetails.city ? `Город и адрес обновлены: ${locationDetails.city}` : 'Адрес обновлён по текущей точке.',
+      );
     },
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось определить локацию',
         error instanceof Error
           ? error.message
@@ -688,6 +703,7 @@ export default function WorkshopEditorScreen() {
       setScheduleFrom(savedScheduleTimes.from);
       setScheduleTo(savedScheduleTimes.to);
       hydratedWorkshopIdRef.current = workshop.id;
+      setDraftStatus('idle');
       unsavedWorkshopDrafts.delete(workshop.id);
       unsavedWorkshopDrafts.delete(CREATE_DRAFT_KEY);
       await Promise.all([
@@ -717,7 +733,7 @@ export default function WorkshopEditorScreen() {
       }
     },
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось сохранить объявление',
         getApiErrorMessage(error, 'Проверьте поля формы и попробуйте ещё раз.'),
       );
@@ -760,7 +776,7 @@ export default function WorkshopEditorScreen() {
     },
     onSuccess: refreshWorkshopData,
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Ошибка загрузки',
         getApiErrorMessage(error, 'Не удалось загрузить фото. Проверьте сеть и попробуйте ещё раз.'),
       );
@@ -773,7 +789,7 @@ export default function WorkshopEditorScreen() {
     },
     onSuccess: refreshWorkshopData,
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось выбрать главное фото',
         getApiErrorMessage(error, 'Проверьте подключение и попробуйте ещё раз.'),
       );
@@ -786,7 +802,7 @@ export default function WorkshopEditorScreen() {
     },
     onSuccess: refreshWorkshopData,
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось удалить фото',
         getApiErrorMessage(error, 'Проверьте подключение и попробуйте ещё раз.'),
       );
@@ -796,28 +812,32 @@ export default function WorkshopEditorScreen() {
   const isPhotoActionBusy = uploadPhoto.isPending || setPrimaryPhoto.isPending || deletePhoto.isPending;
 
   const choosePhotoSource = () => {
-    Alert.alert('Добавить фото', 'Выберите источник изображения для объявления.', [
-      {
-        text: 'Сфоткать',
-        onPress: () => uploadPhoto.mutate('camera'),
-      },
-      {
-        text: 'Выбрать из галереи',
-        onPress: () => uploadPhoto.mutate('library'),
-      },
-      { text: 'Отмена', style: 'cancel' },
-    ]);
+    showActionSheet({
+      title: 'Добавить фото',
+      message: 'Выберите источник изображения для объявления.',
+      actions: [
+        {
+          label: 'Сфоткать',
+          onPress: () => uploadPhoto.mutate('camera'),
+        },
+        {
+          label: 'Выбрать из галереи',
+          variant: 'secondary',
+          onPress: () => uploadPhoto.mutate('library'),
+        },
+      ],
+    });
   };
 
   const confirmDeletePhoto = (photoId: string) => {
-    Alert.alert('Удалить фото?', 'Фото удалится из объявления и с сервера.', [
-      { text: 'Отмена', style: 'cancel' },
-      {
-        text: 'Удалить',
-        style: 'destructive',
-        onPress: () => deletePhoto.mutate(photoId),
-      },
-    ]);
+    showConfirm({
+      title: 'Удалить фото?',
+      message: 'Фото удалится из объявления и с сервера.',
+      confirmLabel: 'Удалить',
+      cancelLabel: 'Отмена',
+      destructive: true,
+      onConfirm: () => deletePhoto.mutate(photoId),
+    });
   };
 
   const openLocationPicker = () => {
@@ -835,7 +855,7 @@ export default function WorkshopEditorScreen() {
       const payload = buildWorkshopPayload(values);
       mutation.mutate(payload);
     } catch (error) {
-      Alert.alert(
+      showError(
         'Не удалось сохранить объявление',
         error instanceof Error ? error.message : 'Проверьте поля формы и попробуйте ещё раз.',
       );
@@ -858,6 +878,22 @@ export default function WorkshopEditorScreen() {
             </View>
           ) : null}
         </View>
+        {currentDraftKey ? (
+          <View style={styles.draftStatus}>
+            <Ionicons
+              name={draftStatus === 'saving' ? 'cloud-upload-outline' : 'checkmark-circle-outline'}
+              size={16}
+              color={draftStatus === 'saving' ? colors.warning : colors.success}
+            />
+            <Text style={styles.draftStatusText}>
+              {draftStatus === 'saving'
+                ? 'Сохраняем черновик...'
+                : draftStatus === 'saved'
+                  ? 'Черновик сохранён'
+                  : 'Черновик сохраняется автоматически'}
+            </Text>
+          </View>
+        ) : null}
         {selectedWorkshop?.rejectionReason ? (
           <View
             style={[
@@ -1104,6 +1140,8 @@ export default function WorkshopEditorScreen() {
                 styles.ghostButton,
                 { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={latitude != null && longitude != null ? 'Изменить точку на карте' : 'Выбрать точку на карте'}
             >
               <Text style={styles.ghostText}>
                 {latitude != null && longitude != null ? 'Изменить точку' : 'Выбрать на карте'}
@@ -1112,11 +1150,19 @@ export default function WorkshopEditorScreen() {
 
             {latitude != null && longitude != null ? (
               <Pressable
-                onPress={() => openExternalMap(latitude, longitude, watch('title') || 'Локация СТО')}
+                onPress={() =>
+                  void openRoute(latitude, longitude, watch('title') || 'Локация СТО').then((result) => {
+                    if (!result.ok) {
+                      showError(result.title, result.message);
+                    }
+                  })
+                }
                 style={[
                   styles.ghostButton,
                   { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel="Посмотреть точку объявления в навигаторе"
               >
                 <Text style={styles.ghostText}>Посмотреть</Text>
               </Pressable>
@@ -1181,6 +1227,8 @@ export default function WorkshopEditorScreen() {
               { borderRadius: buttonRadius, paddingVertical: compact ? 12 : 14 },
               (!activeWorkshopId || uploadPhoto.isPending) && styles.disabledButton,
             ]}
+            accessibilityRole="button"
+            accessibilityLabel="Добавить фото объявления"
           >
             <Text style={styles.secondaryText}>
               {uploadPhoto.isPending ? 'Загружаем...' : 'Добавить фото'}
@@ -1220,6 +1268,8 @@ export default function WorkshopEditorScreen() {
                         styles.photoActionButton,
                         photo.isPrimary && styles.photoActionButtonDisabled,
                       ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={photo.isPrimary ? 'Фото уже выбрано главным' : 'Сделать фото главным'}
                     >
                       <Text style={styles.photoActionText}>
                         {photo.isPrimary ? 'Выбрано' : 'Главное'}
@@ -1229,6 +1279,8 @@ export default function WorkshopEditorScreen() {
                       onPress={() => confirmDeletePhoto(photo.id)}
                       disabled={isPhotoActionBusy}
                       style={[styles.photoActionButton, styles.photoDeleteButton]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Удалить фото объявления"
                     >
                       <Text style={[styles.photoActionText, styles.photoDeleteText]}>Удалить</Text>
                     </Pressable>
@@ -1251,6 +1303,14 @@ export default function WorkshopEditorScreen() {
             </Text>
           </View>
         )}
+        {uploadPhoto.isPending ? (
+          <View style={styles.photoUploadNotice}>
+            <ActivityIndicator color={colors.accentDark} size="small" />
+            <Text style={styles.photoUploadNoticeText}>
+              Фото загружается. Не закрывайте экран до завершения.
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.servicesWrap}>
@@ -1339,10 +1399,12 @@ export default function WorkshopEditorScreen() {
       </View>
 
       <Pressable
+        disabled={mutation.isPending}
         onPress={handleSubmit(submitSave)}
         style={[
           styles.primaryButton,
           { borderRadius: buttonRadius, paddingVertical: compact ? 14 : 16 },
+          mutation.isPending && styles.disabledButton,
         ]}
       >
         <Text style={styles.primaryText}>
@@ -1410,6 +1472,23 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text,
     lineHeight: 20,
+  },
+  draftStatus: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  draftStatusText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
   },
   stageCard: {
     backgroundColor: '#F8F5EF',
@@ -1709,6 +1788,22 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.muted,
     lineHeight: 20,
+  },
+  photoUploadNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F1D1BC',
+    backgroundColor: '#FFF0E5',
+  },
+  photoUploadNoticeText: {
+    flex: 1,
+    color: colors.accentDark,
+    fontWeight: '800',
+    lineHeight: 18,
   },
   servicesWrap: {
     gap: 12,

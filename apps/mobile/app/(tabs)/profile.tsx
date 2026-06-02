@@ -5,10 +5,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthUser, PhotoStatus, UserRole, WorkshopDetails, WorkshopStatus } from '@stomvp/shared';
-import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
+import { showConfirm, showError } from '../../src/store/feedback-store';
 import { useAuthStore } from '../../src/store/auth-store';
 import { useResponsive } from '../../src/utils/responsive';
 import { getWorkshopReadinessFromDetails } from '../../src/utils/workshop-readiness';
@@ -27,6 +28,12 @@ const statusDescriptions: Record<WorkshopStatus, string> = {
   [WorkshopStatus.APPROVED]: 'Объявление опубликовано и видно клиентам в каталоге.',
   [WorkshopStatus.REJECTED]: 'Нужно исправить карточку по замечанию и отправить заново.',
   [WorkshopStatus.BLOCKED]: 'Объявление заблокировано. Нужна проверка администратора.',
+};
+
+const roleLabels: Record<UserRole, string> = {
+  [UserRole.CLIENT]: 'Клиент',
+  [UserRole.MASTER]: 'Мастер',
+  [UserRole.ADMIN]: 'Администратор',
 };
 
 function upsertWorkshop(workshops: WorkshopDetails[] | undefined, workshop: WorkshopDetails) {
@@ -103,7 +110,7 @@ export default function ProfileScreen() {
       });
     },
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось создать объявление',
         getApiErrorMessage(error, 'Не получилось подготовить черновик. Попробуйте ещё раз.'),
       );
@@ -127,7 +134,7 @@ export default function ProfileScreen() {
       ]);
     },
     onError: (error) => {
-      Alert.alert(
+      showError(
         'Не удалось удалить объявление',
         getApiErrorMessage(
           error,
@@ -148,7 +155,7 @@ export default function ProfileScreen() {
       }
     },
     onError: () => {
-      Alert.alert('Ошибка', 'Не удалось изменить статус. Попробуйте ещё раз.');
+      showError('Ошибка', 'Не удалось изменить статус. Попробуйте ещё раз.');
     },
   });
   const workshops = workshopsQuery.data ?? [];
@@ -167,7 +174,7 @@ export default function ProfileScreen() {
           {session?.user.fullName}
         </Text>
         <Text style={styles.muted}>
-          {session?.user.phone} • {session?.user.role}
+          {session?.user.phone} • {session ? roleLabels[session.user.role] : ''}
         </Text>
       </View>
 
@@ -340,18 +347,14 @@ export default function ProfileScreen() {
                   <Pressable
                     disabled={isDeleting}
                     onPress={() =>
-                      Alert.alert(
-                        'Удалить объявление?',
-                        'Объявление, фото, услуги, отзывы, заявки и избранное для этой карточки будут удалены с сервера без возможности восстановления.',
-                        [
-                          { text: 'Отмена', style: 'cancel' },
-                          {
-                            text: 'Удалить',
-                            style: 'destructive',
-                            onPress: () => deleteMutation.mutate(workshop.id),
-                          },
-                        ],
-                      )
+                      showConfirm({
+                        title: 'Удалить объявление?',
+                        message:
+                          'Объявление, фото, услуги, отзывы, заявки и избранное для этой карточки будут удалены с сервера без возможности восстановления.',
+                        confirmLabel: 'Удалить',
+                        destructive: true,
+                        onConfirm: () => deleteMutation.mutate(workshop.id),
+                      })
                     }
                     style={[
                       styles.dangerButton,

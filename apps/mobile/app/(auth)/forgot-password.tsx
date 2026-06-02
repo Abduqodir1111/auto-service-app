@@ -11,10 +11,11 @@ import { Screen } from '../../components/screen';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { usePasswordResetStore } from '../../src/store/password-reset-store';
+import { isLikelyPhone, normalizePhoneForApi } from '../../src/utils/phone';
 import { useResponsive } from '../../src/utils/responsive';
 
 const schema = z.object({
-  phone: z.string().min(6, 'Введите телефон'),
+  phone: z.string().refine(isLikelyPhone, 'Введите телефон в формате +998 90 123 45 67'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -34,10 +35,11 @@ export default function ForgotPasswordScreen() {
 
   const requestMutation = useMutation({
     mutationFn: async (values: FormValues) => {
+      const phone = normalizePhoneForApi(values.phone);
       await api.post('/auth/password-reset/request-code', {
-        phone: values.phone,
+        phone,
       });
-      return values.phone;
+      return phone;
     },
     onSuccess: (phone) => {
       setPhone(phone);

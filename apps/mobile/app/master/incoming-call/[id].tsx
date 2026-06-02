@@ -6,10 +6,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
-  Linking,
   PanResponder,
   Platform,
   Pressable,
@@ -22,7 +20,9 @@ import { ServiceCallItem, ServiceCallStatus } from '@stomvp/shared';
 import { Screen } from '../../../components/screen';
 import { api } from '../../../src/api/client';
 import { colors } from '../../../src/constants/theme';
+import { showConfirm, showError, showSuccess } from '../../../src/store/feedback-store';
 import { getDeviceCoordinates } from '../../../src/utils/device-location';
+import { callPhone, openRoute } from '../../../src/utils/linking-actions';
 
 // Local asset bundled in apps/mobile/android/app/src/main/res/raw/urgent_call.wav
 // and (for iOS) apps/mobile/ios/urgent_call.caf — Metro doesn't bundle .caf,
@@ -77,7 +77,7 @@ export default function MasterIncomingCallScreen() {
       queryClient.invalidateQueries({ queryKey: ['service-call', id] });
     },
     onError: () => {
-      Alert.alert(
+      showError(
         'Не удалось принять',
         'Возможно, время вышло или вызов уже принял другой мастер.',
       );
@@ -109,11 +109,11 @@ export default function MasterIncomingCallScreen() {
       await api.post(`/service-calls/${id}/cancel`);
     },
     onSuccess: () => {
-      Alert.alert('Вызов отменён', 'Клиент получил уведомление.');
+      showSuccess('Вызов отменён', 'Клиент получил уведомление.');
       router.back();
     },
     onError: () => {
-      Alert.alert('Ошибка', 'Не удалось отменить вызов.');
+      showError('Ошибка', 'Не удалось отменить вызов.');
     },
   });
 
@@ -186,17 +186,31 @@ export default function MasterIncomingCallScreen() {
           ) : null}
         </View>
         <Pressable
-          onPress={() => Linking.openURL(`tel:${call.clientPhone}`)}
+          onPress={() =>
+            void callPhone(call.clientPhone).then((result) => {
+              if (!result.ok) {
+                showError(result.title, result.message);
+              }
+            })
+          }
           style={styles.primaryButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Позвонить клиенту ${call.clientPhone}`}
         >
           <Ionicons name="call" size={20} color="#FFFFFF" />
           <Text style={styles.primaryText}>Позвонить клиенту</Text>
         </Pressable>
         <Pressable
           onPress={() =>
-            Linking.openURL(`https://www.google.com/maps?q=${call.lat},${call.lng}`)
+            void openRoute(call.lat, call.lng, call.address || 'Локация клиента').then((result) => {
+              if (!result.ok) {
+                showError(result.title, result.message);
+              }
+            })
           }
           style={styles.secondaryButton}
+          accessibilityRole="button"
+          accessibilityLabel="Открыть адрес клиента в картах"
         >
           <Ionicons name="navigate" size={18} color={colors.accentDark} />
           <Text style={styles.secondaryText}>Открыть в картах</Text>
@@ -208,21 +222,19 @@ export default function MasterIncomingCallScreen() {
         </Pressable>
         <Pressable
           onPress={() =>
-            Alert.alert(
-              'Отменить вызов?',
-              'Клиент получит уведомление и сможет вызвать другого мастера.',
-              [
-                { text: 'Не отменять', style: 'cancel' },
-                {
-                  text: 'Отменить вызов',
-                  style: 'destructive',
-                  onPress: () => cancelMutation.mutate(),
-                },
-              ],
-            )
+            showConfirm({
+              title: 'Отменить вызов?',
+              message: 'Клиент получит уведомление и сможет вызвать другого мастера.',
+              confirmLabel: 'Отменить вызов',
+              cancelLabel: 'Не отменять',
+              destructive: true,
+              onConfirm: () => cancelMutation.mutate(),
+            })
           }
           disabled={cancelMutation.isPending}
           style={[styles.dangerButton, cancelMutation.isPending && styles.disabled]}
+          accessibilityRole="button"
+          accessibilityLabel="Отменить принятый вызов"
         >
           <Text style={styles.dangerText}>
             {cancelMutation.isPending ? 'Отменяем...' : 'Отменить вызов'}
