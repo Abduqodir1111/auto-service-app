@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WorkshopSummary } from '@stomvp/shared';
 import { getCategoryIcon } from '../src/constants/category-meta';
@@ -164,6 +165,24 @@ export function WorkshopCard({ workshop, favoriteAction }: Props) {
       >
         {workshop.description}
       </Text>
+
+      <View style={styles.quickActions}>
+        <Pressable
+          onPress={(event) => {
+            event.stopPropagation();
+            void Linking.openURL(`tel:${workshop.phone}`);
+          }}
+          style={({ pressed }) => [
+            styles.phoneButton,
+            { width: actionSize + 8, height: actionSize + 8, borderRadius: compact ? 16 : 17 },
+            pressed && styles.buttonPressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Позвонить мастеру ${workshop.phone}`}
+        >
+          <Ionicons name="call" size={compact ? 19 : 20} color="#FFFFFF" />
+        </Pressable>
+      </View>
 
       <View style={styles.chips}>
         {workshop.categories.slice(0, 3).map((category) => (
@@ -333,6 +352,19 @@ const styles = StyleSheet.create({
   description: {
     color: colors.text,
     lineHeight: 21,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  phoneButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.success,
   },
   chips: {
     flexDirection: 'row',

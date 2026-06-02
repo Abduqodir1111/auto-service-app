@@ -1,4 +1,4 @@
-import { PropsWithChildren } from 'react';
+import { PropsWithChildren, ReactNode } from 'react';
 import { Edge, SafeAreaView } from 'react-native-safe-area-context';
 import {
   KeyboardAvoidingView,
@@ -19,9 +19,10 @@ type Props = PropsWithChildren<{
   edges?: Edge[];
   refreshing?: boolean;
   onRefresh?: () => void;
+  footer?: ReactNode;
 }>;
 
-export function Screen({ children, scroll = true, style, edges, refreshing, onRefresh }: Props) {
+export function Screen({ children, scroll = true, style, edges, refreshing, onRefresh, footer }: Props) {
   const layout = useResponsive();
   const adaptiveContentStyle = {
     width: '100%' as const,
@@ -34,6 +35,7 @@ export function Screen({ children, scroll = true, style, edges, refreshing, onRe
 
   const content = scroll ? (
     <ScrollView
+      style={styles.scroller}
       contentContainerStyle={[styles.content, adaptiveContentStyle, style]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -64,7 +66,25 @@ export function Screen({ children, scroll = true, style, edges, refreshing, onRe
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
       >
-        {content}
+        <View style={styles.body}>
+          {content}
+          {footer ? (
+            <View
+              style={[
+                styles.footer,
+                {
+                  paddingHorizontal: layout.gutter,
+                  paddingTop: layout.isSmallPhone ? 10 : 12,
+                  paddingBottom: layout.isSmallPhone ? 10 : 12,
+                },
+              ]}
+            >
+              <View style={[styles.footerInner, { maxWidth: layout.contentMaxWidth }]}>
+                {footer}
+              </View>
+            </View>
+          ) : null}
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -76,4 +96,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {},
+  scroller: {
+    flex: 1,
+  },
+  body: {
+    flex: 1,
+  },
+  footer: {
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  footerInner: {
+    width: '100%',
+    alignSelf: 'center',
+  },
 });

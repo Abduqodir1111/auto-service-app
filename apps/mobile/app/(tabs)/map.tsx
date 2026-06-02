@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -20,7 +21,7 @@ import { getCategoryIcon } from '../../src/constants/category-meta';
 import { colors } from '../../src/constants/theme';
 import { getDeviceCoordinates } from '../../src/utils/device-location';
 import { createWorkshopsLeafletHtml } from '../../src/utils/leaflet-html';
-import { getDefaultMapCoordinates } from '../../src/utils/maps';
+import { getDefaultMapCoordinates, openExternalMap } from '../../src/utils/maps';
 import { useResponsive } from '../../src/utils/responsive';
 
 type MapMessage =
@@ -51,7 +52,7 @@ export default function MapTabScreen() {
   const layout = useResponsive();
   const compact = layout.isSmallPhone;
   const chipIconSize = compact ? 13 : 14;
-  const locateButtonSize = compact ? 40 : 44;
+  const locateButtonHeight = compact ? 40 : 44;
   const previewThumbSize = compact ? 62 : 76;
 
   const categoriesQuery = useQuery({
@@ -313,8 +314,7 @@ export default function MapTabScreen() {
             {
               top: compact ? 8 : 12,
               right: compact ? 8 : 12,
-              width: locateButtonSize,
-              height: locateButtonSize,
+              height: locateButtonHeight,
               borderRadius: compact ? 12 : 14,
             },
           ]}
@@ -322,7 +322,10 @@ export default function MapTabScreen() {
           {isLocating ? (
             <ActivityIndicator color={colors.accentDark} size="small" />
           ) : (
-            <Ionicons name="locate-outline" size={20} color={colors.accentDark} />
+            <>
+              <Ionicons name="locate-outline" size={20} color={colors.accentDark} />
+              <Text style={styles.locateButtonText}>Рядом</Text>
+            </>
           )}
         </Pressable>
 
@@ -387,18 +390,54 @@ export default function MapTabScreen() {
               </View>
             </View>
 
-            <Pressable
-              onPress={() => router.push(`/workshop/${selectedWorkshop.id}`)}
-              style={[
-                styles.primaryButton,
-                {
-                  paddingVertical: compact ? 12 : 14,
-                  borderRadius: compact ? 15 : 18,
-                },
-              ]}
-            >
-              <Text style={styles.primaryText}>Открыть объявление</Text>
-            </Pressable>
+            <View style={[styles.previewActions, compact && styles.previewActionsCompact]}>
+              <Pressable
+                onPress={() => void Linking.openURL(`tel:${selectedWorkshop.phone}`)}
+                style={({ pressed }) => [
+                  styles.previewCallButton,
+                  { height: compact ? 44 : 48, borderRadius: compact ? 15 : 17 },
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Позвонить мастеру ${selectedWorkshop.phone}`}
+              >
+                <Ionicons name="call" size={20} color="#FFFFFF" />
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  void openExternalMap(
+                    selectedWorkshop.latitude as number,
+                    selectedWorkshop.longitude as number,
+                    selectedWorkshop.title,
+                  )
+                }
+                style={({ pressed }) => [
+                  styles.previewRouteButton,
+                  {
+                    height: compact ? 44 : 48,
+                    borderRadius: compact ? 15 : 17,
+                  },
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Ionicons name="navigate" size={18} color={colors.accentDark} />
+                <Text style={styles.previewRouteText}>Маршрут</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push(`/workshop/${selectedWorkshop.id}`)}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  styles.previewOpenButton,
+                  {
+                    height: compact ? 44 : 48,
+                    borderRadius: compact ? 15 : 17,
+                  },
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text style={styles.primaryText}>Открыть</Text>
+              </Pressable>
+            </View>
           </View>
         ) : null}
       </View>
@@ -463,14 +502,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
-    width: 44,
     height: 44,
+    minWidth: 92,
+    paddingHorizontal: 12,
     borderRadius: 14,
+    flexDirection: 'row',
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 253, 249, 0.96)',
     borderWidth: 1,
     borderColor: 'rgba(24, 33, 32, 0.08)',
+  },
+  locateButtonText: {
+    color: colors.accentDark,
+    fontWeight: '800',
+    fontSize: 13,
   },
   previewOverlay: {
     position: 'absolute',
@@ -543,6 +590,40 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  previewActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  previewActionsCompact: {
+    gap: 6,
+  },
+  previewCallButton: {
+    width: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.success,
+  },
+  previewRouteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FFF0E5',
+    borderWidth: 1,
+    borderColor: '#F1D1BC',
+  },
+  previewRouteText: {
+    color: colors.accentDark,
+    fontWeight: '800',
+  },
+  previewOpenButton: {
+    flex: 1,
+    paddingVertical: 0,
+  },
+  buttonPressed: {
+    opacity: 0.9,
   },
   primaryText: {
     color: '#FFFFFF',

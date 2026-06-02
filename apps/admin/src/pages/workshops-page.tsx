@@ -7,15 +7,66 @@ import { AdminWorkshop } from '../api/types';
 import { StatusBadge } from '../components/status-badge';
 import { formatPriceRange } from '../lib/format';
 
+type WorkshopFilter = WorkshopStatus | 'ALL' | 'ATTENTION';
+
 const photoStatusLabels: Record<PhotoStatus, string> = {
   [PhotoStatus.PENDING]: 'На проверке',
   [PhotoStatus.APPROVED]: 'Одобрено',
   [PhotoStatus.REJECTED]: 'Отклонено',
 };
 
+const statusFilters: Array<{ label: string; value: WorkshopFilter }> = [
+  { label: 'Требует внимания', value: 'ATTENTION' },
+  { label: 'Все', value: 'ALL' },
+  { label: 'На модерации', value: WorkshopStatus.PENDING },
+  { label: 'Отклонённые', value: WorkshopStatus.REJECTED },
+  { label: 'Черновики', value: WorkshopStatus.DRAFT },
+  { label: 'Опубликованные', value: WorkshopStatus.APPROVED },
+  { label: 'Заблокированные', value: WorkshopStatus.BLOCKED },
+];
+
+function getWorkshopTone(status: WorkshopStatus) {
+  if (status === WorkshopStatus.APPROVED) {
+    return 'success' as const;
+  }
+
+  if (status === WorkshopStatus.PENDING) {
+    return 'warning' as const;
+  }
+
+  if (status === WorkshopStatus.BLOCKED) {
+    return 'danger' as const;
+  }
+
+  return 'neutral' as const;
+}
+
+function matchesSearch(workshop: AdminWorkshop, search: string) {
+  const query = search.trim().toLowerCase();
+  if (!query) {
+    return true;
+  }
+
+  return [
+    workshop.title,
+    workshop.city,
+    workshop.addressLine,
+    workshop.phone,
+    workshop.owner.fullName,
+    workshop.owner.phone,
+    ...workshop.categories.map((category) => category.name),
+    ...workshop.services.map((service) => service.name),
+  ]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(query));
+}
+
 export function WorkshopsPage() {
   const queryClient = useQueryClient();
   const [rejectionReason, setRejectionReason] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<WorkshopFilter>('ATTENTION');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'workshops'],
@@ -68,6 +119,30 @@ export function WorkshopsPage() {
     },
   });
 
+  const bulkModerate = useMutation({
+    mutationFn: async (payload: {
+      ids: string[];
+      status: WorkshopStatus;
+      rejectionReason?: string;
+    }) => {
+      await Promise.all(
+        payload.ids.map((id) =>
+          http.patch(`/admin/workshops/${id}/moderate`, {
+            status: payload.status,
+            rejectionReason: payload.rejectionReason,
+            approvePendingPhotos: payload.status === WorkshopStatus.APPROVED,
+          }),
+        ),
+      );
+    },
+    onSuccess: async () => {
+      setSelectedIds([]);
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'workshops'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'photos'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'analytics'] });
+    },
+  });
+
   const photoAction = useMutation({
     mutationFn: async (payload: {
       workshopId: string;
@@ -107,8 +182,9 @@ export function WorkshopsPage() {
     },
   });
 
-  const mutationError =
-    [moderate.error, photoAction.error].find((error) => axios.isAxiosError(error));
+  const mutationError = [moderate.error, bulkModerate.error, photoAction.error].find((error) =>
+    axios.isAxiosError(error),
+  );
 
   const mutationErrorText =
     mutationError && axios.isAxiosError(mutationError)
@@ -116,10 +192,10 @@ export function WorkshopsPage() {
         ? mutationError.response?.data?.message
         : Array.isArray(mutationError.response?.data?.message)
           ? mutationError.response?.data?.message.join(', ')
-        : 'Не удалось изменить статус карточки.'
+          : 'Не удалось изменить статус карточки.'
       : null;
 
-  const isActionPending = moderate.isPending || photoAction.isPending;
+  const isActionPending = moderate.isPending || bulkModerate.isPending || photoAction.isPending;
 
   const orderedWorkshops = useMemo(() => {
     if (!data) {
@@ -137,6 +213,63 @@ export function WorkshopsPage() {
     return [...data].sort((left, right) => priority[left.status] - priority[right.status]);
   }, [data]);
 
+  const filteredWorkshops = useMemo(
+    () =>
+      orderedWorkshops.filter((workshop) => {
+        const statusMatches =
+          statusFilter === 'ALL' ||
+          (statusFilter === 'ATTENTION'
+            ? workshop.status === WorkshopStatus.PENDING ||
+              workshop.photos.some((photo) => photo.status === PhotoStatus.PENDING)
+            : workshop.status === statusFilter);
+
+        return statusMatches && matchesSearch(workshop, search);
+      }),
+    [orderedWorkshops, search, statusFilter],
+  );
+
+  const selectedCount = selectedIds.length;
+  const allVisibleSelected =
+    filteredWorkshops.length > 0 &&
+    filteredWorkshops.every((workshop) => selectedIds.includes(workshop.id));
+
+  const toggleAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedIds((current) =>
+        current.filter((id) => !filteredWorkshops.some((workshop) => workshop.id === id)),
+      );
+      return;
+    }
+
+    setSelectedIds((current) => [
+      ...current,
+      ...filteredWorkshops.map((workshop) => workshop.id).filter((id) => !current.includes(id)),
+    ]);
+  };
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  };
+
+  const runBulkModeration = (status: WorkshopStatus) => {
+    const reason =
+      status === WorkshopStatus.REJECTED || status === WorkshopStatus.BLOCKED
+        ? window.prompt('Укажите причину для выбранных карточек')?.trim()
+        : undefined;
+
+    if ((status === WorkshopStatus.REJECTED || status === WorkshopStatus.BLOCKED) && !reason) {
+      return;
+    }
+
+    bulkModerate.mutate({
+      ids: selectedIds,
+      status,
+      rejectionReason: reason,
+    });
+  };
+
   return (
     <section className="page">
       <header className="page__header">
@@ -146,186 +279,262 @@ export function WorkshopsPage() {
         </div>
       </header>
 
+      <div className="panel admin-toolbar">
+        <label className="field admin-search">
+          <span>Поиск</span>
+          <input
+            value={search}
+            placeholder="Название, владелец, телефон, город, услуга или категория"
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <div className="admin-filter-tabs" aria-label="Фильтр мастерских">
+          {statusFilters.map((filter) => (
+            <button
+              key={filter.value}
+              className={`admin-filter-tab${statusFilter === filter.value ? ' is-active' : ''}`}
+              type="button"
+              onClick={() => {
+                setStatusFilter(filter.value);
+                setSelectedIds([]);
+              }}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selectedCount ? (
+        <div className="panel bulk-bar">
+          <strong>Выбрано: {selectedCount}</strong>
+          <div className="actions">
+            <button
+              className="button"
+              disabled={isActionPending}
+              onClick={() => runBulkModeration(WorkshopStatus.APPROVED)}
+            >
+              Одобрить карточки и фото
+            </button>
+            <button
+              className="button button--ghost"
+              disabled={isActionPending}
+              onClick={() => runBulkModeration(WorkshopStatus.REJECTED)}
+            >
+              Отклонить
+            </button>
+            <button
+              className="button button--danger"
+              disabled={isActionPending}
+              onClick={() => runBulkModeration(WorkshopStatus.BLOCKED)}
+            >
+              Заблокировать
+            </button>
+            <button
+              className="button button--ghost"
+              disabled={isActionPending}
+              onClick={() => setSelectedIds([])}
+            >
+              Снять выбор
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="stack">
         {mutationErrorText ? <div className="alert">{mutationErrorText}</div> : null}
         {isLoading || !data ? (
           <div className="panel">Загружаем мастерские...</div>
-        ) : orderedWorkshops.length === 0 ? (
-          <div className="panel">Карточек для модерации пока нет.</div>
+        ) : filteredWorkshops.length === 0 ? (
+          <div className="panel">По выбранным фильтрам карточек нет.</div>
         ) : (
-          orderedWorkshops.map((workshop) => {
-            const pendingPhotosCount = workshop.photos.filter(
-              (photo) => photo.status === PhotoStatus.PENDING,
-            ).length;
+          <>
+            <label className="selection-toggle selection-toggle--all">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleAllVisible}
+              />
+              <span>Выбрать все видимые карточки</span>
+            </label>
 
-            return (
-              <article className="panel workshop-card" key={workshop.id}>
-              <div className="workshop-card__top">
-                <div>
-                  <h3>{workshop.title}</h3>
-                  <p className="muted">
-                    {workshop.city}, {workshop.addressLine}
-                  </p>
-                </div>
-                <StatusBadge
-                  tone={
-                    workshop.status === WorkshopStatus.APPROVED
-                      ? 'success'
-                      : workshop.status === WorkshopStatus.PENDING
-                        ? 'warning'
-                        : workshop.status === WorkshopStatus.BLOCKED
-                          ? 'danger'
-                          : 'neutral'
-                  }
-                >
-                  {workshop.status}
-                </StatusBadge>
-              </div>
+            {filteredWorkshops.map((workshop) => {
+              const pendingPhotosCount = workshop.photos.filter(
+                (photo) => photo.status === PhotoStatus.PENDING,
+              ).length;
 
-              <p className="muted">
-                Владелец: {workshop.owner.fullName} • {workshop.owner.phone}
-              </p>
-
-              <div className="actions">
-                <StatusBadge tone={workshop.isVerifiedMaster ? 'success' : 'neutral'}>
-                  {workshop.isVerifiedMaster ? 'Проверенный мастер' : 'Мастер без бейджа'}
-                </StatusBadge>
-              </div>
-
-              <p className="muted">
-                Фото на проверке: {pendingPhotosCount} • Всего фото: {workshop.photos.length}
-              </p>
-
-              {workshop.photos.length ? (
-                <div className="workshop-photo-strip">
-                  {workshop.photos.map((photo) => (
-                    <div className="workshop-photo" key={photo.id}>
-                      <img alt={workshop.title} src={photo.url} />
-                      <div className="workshop-photo__meta">
-                        <span>{photoStatusLabels[photo.status]}</span>
-                        {photo.isPrimary ? <strong>Главное</strong> : null}
-                      </div>
-                      <div className="actions">
-                        <button
-                          className="button button--ghost button--small"
-                          disabled={photo.isPrimary || isActionPending}
-                          onClick={() => {
-                            photoAction.reset();
-                            photoAction.mutate({
-                              workshopId: workshop.id,
-                              photoId: photo.id,
-                              action: 'primary',
-                            });
-                          }}
-                        >
-                          Главное
-                        </button>
-                        <button
-                          className="button button--danger button--small"
-                          disabled={isActionPending}
-                          onClick={() => {
-                            if (!window.confirm('Удалить это фото с сервера?')) {
-                              return;
-                            }
-
-                            photoAction.reset();
-                            photoAction.mutate({
-                              workshopId: workshop.id,
-                              photoId: photo.id,
-                              action: 'delete',
-                            });
-                          }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
+              return (
+                <article className="panel workshop-card" key={workshop.id}>
+                  <div className="workshop-card__top">
+                    <div>
+                      <label className="selection-toggle">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(workshop.id)}
+                          onChange={() => toggleOne(workshop.id)}
+                        />
+                        <span>Выбрать</span>
+                      </label>
+                      <h3>{workshop.title}</h3>
+                      <p className="muted">
+                        {workshop.city}, {workshop.addressLine}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="chips">
-                {workshop.categories.map((category) => (
-                  <span className="chip" key={category.id}>
-                    {category.name}
-                  </span>
-                ))}
-              </div>
-
-              <div className="service-list">
-                {workshop.services.map((service) => (
-                  <div className="service-item" key={service.id}>
-                    <strong>{service.name}</strong>
-                    <span>{formatPriceRange(service.priceFrom, service.priceTo)} сом</span>
+                    <StatusBadge tone={getWorkshopTone(workshop.status)}>
+                      {workshop.status}
+                    </StatusBadge>
                   </div>
-                ))}
-              </div>
 
-              {workshop.rejectionReason ? (
-                <div className="alert">{workshop.rejectionReason}</div>
-              ) : null}
+                  <p className="muted">
+                    Владелец: {workshop.owner.fullName} • {workshop.owner.phone}
+                  </p>
 
-              <label className="field">
-                <span>Причина отклонения / блокировки</span>
-                <input
-                  value={rejectionReason[workshop.id] ?? ''}
-                  onChange={(event) =>
-                    setRejectionReason((current) => ({
-                      ...current,
-                      [workshop.id]: event.target.value,
-                    }))
-                  }
-                  placeholder="Например: не хватает фото или неверный адрес"
-                />
-              </label>
+                  <div className="actions">
+                    <StatusBadge tone={workshop.isVerifiedMaster ? 'success' : 'neutral'}>
+                      {workshop.isVerifiedMaster ? 'Проверенный мастер' : 'Мастер без бейджа'}
+                    </StatusBadge>
+                    {pendingPhotosCount ? (
+                      <StatusBadge tone="warning">
+                        Фото на проверке: {pendingPhotosCount}
+                      </StatusBadge>
+                    ) : null}
+                  </div>
 
-              <div className="actions">
-                <button
-                  className="button"
-                  disabled={isActionPending}
-                  onClick={() => {
-                    moderate.reset();
-                    moderate.mutate({
-                      id: workshop.id,
-                      status: WorkshopStatus.APPROVED,
-                      approvePendingPhotos: true,
-                    });
-                  }}
-                >
-                  Одобрить карточку и фото
-                </button>
-                <button
-                  className="button button--ghost"
-                  disabled={isActionPending}
-                  onClick={() => {
-                    moderate.reset();
-                    moderate.mutate({
-                      id: workshop.id,
-                      status: WorkshopStatus.REJECTED,
-                      rejectionReason: rejectionReason[workshop.id],
-                    });
-                  }}
-                >
-                  Отклонить
-                </button>
-                <button
-                  className="button button--danger"
-                  disabled={isActionPending}
-                  onClick={() => {
-                    moderate.reset();
-                    moderate.mutate({
-                      id: workshop.id,
-                      status: WorkshopStatus.BLOCKED,
-                      rejectionReason: rejectionReason[workshop.id],
-                    });
-                  }}
-                >
-                  Заблокировать
-                </button>
-              </div>
-              </article>
-            );
-          })
+                  <p className="muted">
+                    Фото на проверке: {pendingPhotosCount} • Всего фото: {workshop.photos.length}
+                  </p>
+
+                  {workshop.photos.length ? (
+                    <div className="workshop-photo-strip">
+                      {workshop.photos.map((photo) => (
+                        <div className="workshop-photo" key={photo.id}>
+                          <img alt={workshop.title} src={photo.url} />
+                          <div className="workshop-photo__meta">
+                            <span>{photoStatusLabels[photo.status]}</span>
+                            {photo.isPrimary ? <strong>Главное</strong> : null}
+                          </div>
+                          <div className="actions">
+                            <button
+                              className="button button--ghost button--small"
+                              disabled={photo.isPrimary || isActionPending}
+                              onClick={() => {
+                                photoAction.reset();
+                                photoAction.mutate({
+                                  workshopId: workshop.id,
+                                  photoId: photo.id,
+                                  action: 'primary',
+                                });
+                              }}
+                            >
+                              Главное
+                            </button>
+                            <button
+                              className="button button--danger button--small"
+                              disabled={isActionPending}
+                              onClick={() => {
+                                if (!window.confirm('Удалить это фото с сервера?')) {
+                                  return;
+                                }
+
+                                photoAction.reset();
+                                photoAction.mutate({
+                                  workshopId: workshop.id,
+                                  photoId: photo.id,
+                                  action: 'delete',
+                                });
+                              }}
+                            >
+                              Удалить
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="chips">
+                    {workshop.categories.map((category) => (
+                      <span className="chip" key={category.id}>
+                        {category.name}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="service-list">
+                    {workshop.services.map((service) => (
+                      <div className="service-item" key={service.id}>
+                        <strong>{service.name}</strong>
+                        <span>{formatPriceRange(service.priceFrom, service.priceTo)} сом</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {workshop.rejectionReason ? (
+                    <div className="alert">{workshop.rejectionReason}</div>
+                  ) : null}
+
+                  <label className="field">
+                    <span>Причина отклонения / блокировки</span>
+                    <input
+                      value={rejectionReason[workshop.id] ?? ''}
+                      onChange={(event) =>
+                        setRejectionReason((current) => ({
+                          ...current,
+                          [workshop.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="Например: не хватает фото или неверный адрес"
+                    />
+                  </label>
+
+                  <div className="actions">
+                    <button
+                      className="button"
+                      disabled={isActionPending}
+                      onClick={() => {
+                        moderate.reset();
+                        moderate.mutate({
+                          id: workshop.id,
+                          status: WorkshopStatus.APPROVED,
+                          approvePendingPhotos: true,
+                        });
+                      }}
+                    >
+                      Одобрить карточку и фото
+                    </button>
+                    <button
+                      className="button button--ghost"
+                      disabled={isActionPending}
+                      onClick={() => {
+                        moderate.reset();
+                        moderate.mutate({
+                          id: workshop.id,
+                          status: WorkshopStatus.REJECTED,
+                          rejectionReason: rejectionReason[workshop.id],
+                        });
+                      }}
+                    >
+                      Отклонить
+                    </button>
+                    <button
+                      className="button button--danger"
+                      disabled={isActionPending}
+                      onClick={() => {
+                        moderate.reset();
+                        moderate.mutate({
+                          id: workshop.id,
+                          status: WorkshopStatus.BLOCKED,
+                          rejectionReason: rejectionReason[workshop.id],
+                        });
+                      }}
+                    >
+                      Заблокировать
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </>
         )}
       </div>
     </section>

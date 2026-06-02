@@ -64,6 +64,14 @@ export function createLeafletHtml({
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+    />
     <style>
       html, body, #map {
         margin: 0;
@@ -243,6 +251,25 @@ export function createWorkshopsLeafletHtml({
         box-shadow: 0 8px 18px rgba(24, 33, 32, 0.22);
       }
 
+      .workshop-cluster {
+        background: transparent;
+        border: none;
+      }
+
+      .workshop-cluster__bubble {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: #0c7f64;
+        color: #fff;
+        border: 4px solid rgba(255, 253, 249, 0.96);
+        box-shadow: 0 12px 26px rgba(24, 33, 32, 0.24);
+        font-size: 14px;
+        font-weight: 800;
+      }
+
       .popup {
         min-width: 160px;
       }
@@ -293,6 +320,7 @@ export function createWorkshopsLeafletHtml({
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script>
       const workshops = ${serializedWorkshops};
       const requestedCenter = ${serializedCenter};
@@ -362,10 +390,25 @@ export function createWorkshopsLeafletHtml({
         iconSize: [20, 20],
         iconAnchor: [10, 10]
       });
+      const markerLayer = L.markerClusterGroup
+        ? L.markerClusterGroup({
+            showCoverageOnHover: false,
+            spiderfyOnMaxZoom: true,
+            maxClusterRadius: 46,
+            iconCreateFunction: function (cluster) {
+              return L.divIcon({
+                className: 'workshop-cluster',
+                html: '<div class="workshop-cluster__bubble">' + cluster.getChildCount() + '</div>',
+                iconSize: [42, 42],
+                iconAnchor: [21, 21]
+              });
+            }
+          })
+        : L.layerGroup();
       let suppressNextMapClick = false;
 
       workshops.forEach((item) => {
-        const marker = L.marker([item.latitude, item.longitude], { icon }).addTo(map);
+        const marker = L.marker([item.latitude, item.longitude], { icon });
         marker.bindPopup(
           '<div class="popup">' +
             '<strong>' + escapePopup(item.title) + '</strong>' +
@@ -391,7 +434,10 @@ export function createWorkshopsLeafletHtml({
         });
 
         bounds.push([item.latitude, item.longitude]);
+        markerLayer.addLayer(marker);
       });
+
+      map.addLayer(markerLayer);
 
       if (userLocation) {
         L.marker([userLocation.latitude, userLocation.longitude], {

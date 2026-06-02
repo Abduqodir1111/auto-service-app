@@ -11,6 +11,7 @@ import { ReportTargetType, UserRole, WorkshopDetails } from '@stomvp/shared';
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
 import { WorkshopDetailSkeleton } from '../../components/skeleton';
+import { AppButton } from '../../components/ui';
 import { api } from '../../src/api/client';
 import { colors } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/store/auth-store';
@@ -232,6 +233,51 @@ export default function WorkshopDetailsScreen() {
       refreshing={workshopQuery.isRefetching}
       onRefresh={() => void workshopQuery.refetch()}
       style={[styles.screenContent, { paddingBottom: compact ? 20 : 28 }]}
+      footer={
+        <View style={[styles.stickyActions, compact && styles.stickyActionsCompact]}>
+          <Pressable
+            onPress={() => Linking.openURL(`tel:${workshop.phone}`)}
+            style={({ pressed }) => [
+              styles.stickyCallButton,
+              pressed && styles.buttonPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Позвонить мастеру ${workshop.phone}`}
+          >
+            <Ionicons name="call" size={22} color="#FFFFFF" />
+          </Pressable>
+          <View style={styles.stickyActionItem}>
+            <AppButton
+              label="Маршрут"
+              icon="navigate"
+              compact
+              variant={hasCoordinates ? 'secondary' : 'ghost'}
+              disabled={!hasCoordinates}
+              onPress={() => {
+                if (!hasCoordinates) {
+                  return;
+                }
+
+                void openExternalMap(
+                  workshop.latitude as number,
+                  workshop.longitude as number,
+                  workshop.title,
+                );
+              }}
+            />
+          </View>
+          <View style={styles.stickyActionItem}>
+            <AppButton
+              label="Заявка"
+              icon="document-text-outline"
+              compact
+              onPress={() =>
+                router.push({ pathname: '/requests/create', params: { workshopId: workshop.id } })
+              }
+            />
+          </View>
+        </View>
+      }
     >
       <Stack.Screen options={{ headerShown: false }} />
 
@@ -359,6 +405,32 @@ export default function WorkshopDetailsScreen() {
                 resizeMode="contain"
               />
             ) : null}
+            <View
+              style={[
+                styles.photoModalContact,
+                { bottom: Math.max(insets.bottom + 18, 28) },
+              ]}
+            >
+              <View style={styles.photoModalContactCopy}>
+                <Text style={styles.photoModalContactLabel}>Контакты мастера</Text>
+                <Text
+                  style={styles.photoModalContactPhone}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.78}
+                >
+                  {workshop.phone}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => Linking.openURL(`tel:${workshop.phone}`)}
+                style={styles.photoModalPhoneButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Позвонить мастеру ${workshop.phone}`}
+              >
+                <Ionicons name="call" size={24} color="#FFFFFF" />
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -496,15 +568,6 @@ export default function WorkshopDetailsScreen() {
           </Text>
         </Pressable>
       </View>
-
-      <Pressable
-        onPress={() =>
-          router.push({ pathname: '/requests/create', params: { workshopId: workshop.id } })
-        }
-        style={styles.requestButton}
-      >
-        <Text style={styles.primaryText}>Оставить заявку</Text>
-      </Pressable>
 
       <Pressable
         disabled={reportMutation.isPending}
@@ -1004,5 +1067,62 @@ const styles = StyleSheet.create({
   photoModalImage: {
     width: '100%',
     height: '100%',
+  },
+  photoModalContact: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: 14,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.72)',
+  },
+  photoModalContactCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  photoModalContactLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  photoModalContactPhone: {
+    color: colors.text,
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  photoModalPhoneButton: {
+    width: 54,
+    height: 54,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.success,
+  },
+  stickyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stickyActionsCompact: {
+    gap: 8,
+  },
+  stickyActionItem: {
+    flex: 1,
+  },
+  stickyCallButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.success,
   },
 });

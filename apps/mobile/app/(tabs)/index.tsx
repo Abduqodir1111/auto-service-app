@@ -21,6 +21,7 @@ import { CallMasterFab } from '../../components/call-master-fab';
 import { CallStatusBanner } from '../../components/call-status-banner';
 import { Screen } from '../../components/screen';
 import { WorkshopCardSkeleton } from '../../components/skeleton';
+import { EmptyState, NetworkBanner, RetryState } from '../../components/ui';
 import { WorkshopCard } from '../../components/workshop-card';
 import { api } from '../../src/api/client';
 import { getCategoryIcon } from '../../src/constants/category-meta';
@@ -235,6 +236,8 @@ export default function CatalogScreen() {
 
         <CallStatusBanner />
 
+        {workshopsQuery.isError || categoriesQuery.isError ? <NetworkBanner /> : null}
+
         <ScrollView
           ref={filterRailRef}
           horizontal
@@ -375,6 +378,11 @@ export default function CatalogScreen() {
             <WorkshopCardSkeleton />
             <WorkshopCardSkeleton />
           </>
+        ) : workshopsQuery.isError ? (
+          <RetryState
+            onRetry={() => void Promise.all([workshopsQuery.refetch(), categoriesQuery.refetch()])}
+            loading={workshopsQuery.isRefetching || categoriesQuery.isRefetching}
+          />
         ) : (workshopsQuery.data ?? []).length ? (
           (workshopsQuery.data ?? []).map((workshop) => (
             <WorkshopCard
@@ -391,12 +399,25 @@ export default function CatalogScreen() {
             />
           ))
         ) : (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Пока нет опубликованных карточек</Text>
-            <Text style={styles.emptyText}>
-              Потяните экран вниз, чтобы заново проверить каталог после модерации или публикации.
-            </Text>
-          </View>
+          <EmptyState
+            icon="construct-outline"
+            title={search || categoryId ? 'По фильтрам ничего не найдено' : 'Пока нет опубликованных карточек'}
+            text={
+              search || categoryId
+                ? 'Попробуйте убрать фильтр или изменить поисковый запрос.'
+                : 'Потяните экран вниз, чтобы заново проверить каталог после модерации или публикации.'
+            }
+            actionLabel={search || categoryId ? 'Сбросить фильтры' : undefined}
+            onAction={
+              search || categoryId
+                ? () => {
+                    setSearch('');
+                    setCategoryId(undefined);
+                    setSearchExpanded(false);
+                  }
+                : undefined
+            }
+          />
         )}
       </ScrollView>
 
