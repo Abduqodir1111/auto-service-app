@@ -26,6 +26,15 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>;
 
+function formatPhone(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length !== 12 || !digits.startsWith('998')) {
+    return phone;
+  }
+
+  return `+998 ${digits.slice(3, 5)} ${digits.slice(5, 8)} ${digits.slice(8, 10)} ${digits.slice(10, 12)}`;
+}
+
 export default function ResetPasswordScreen() {
   const phone = usePasswordResetStore((state) => state.phone);
   const verificationToken = usePasswordResetStore((state) => state.verificationToken);
@@ -81,27 +90,46 @@ export default function ResetPasswordScreen() {
   }
 
   return (
-    <Screen>
-      <Pressable onPress={() => router.back()} style={styles.backButton}>
-        <Ionicons name="chevron-back" size={24} color={colors.text} />
+    <Screen
+      style={[
+        styles.screen,
+        {
+          gap: compact ? 12 : 14,
+          paddingTop: compact ? 12 : 16,
+          paddingBottom: compact ? 18 : 24,
+        },
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Назад"
+        onPress={() => router.back()}
+        style={styles.backButton}
+      >
+        <Ionicons name="chevron-back" size={25} color="#091A2C" />
       </Pressable>
 
-      <View style={{ gap: compact ? 6 : 8 }}>
+      <View style={styles.successHero}>
+        <View style={styles.successHalo}>
+          <Ionicons name="checkmark" size={48} color="#FFFFFF" />
+        </View>
+      </View>
+
+      <View style={styles.copy}>
         <Text
           style={[
             styles.title,
             {
-              marginTop: compact ? 2 : 10,
-              fontSize: layout.font(32, 0.18, 28, 34),
-              lineHeight: layout.font(38, 0.18, 34, 40),
+              fontSize: layout.font(30, 0.2, 27, 32),
+              lineHeight: layout.font(36, 0.16, 33, 38),
             },
           ]}
         >
           Новый пароль
         </Text>
         <Text style={styles.subtitle}>
-          Придумайте новый пароль для номера {phone}. После сохранения можно будет
-          войти с новым паролем.
+          Код подтверждён для номера{' '}
+          <Text style={styles.phoneAccent}>{formatPhone(phone)}</Text>. Задайте новый пароль.
         </Text>
       </View>
 
@@ -109,9 +137,9 @@ export default function ResetPasswordScreen() {
         style={[
           styles.card,
           {
-            borderRadius: compact ? 20 : 24,
-            padding: compact ? 14 : 18,
-            gap: compact ? 12 : 14,
+            borderRadius: compact ? 24 : 28,
+            padding: compact ? 14 : 16,
+            gap: compact ? 11 : 13,
           },
         ]}
       >
@@ -146,16 +174,24 @@ export default function ResetPasswordScreen() {
           )}
         />
 
-        {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+        <View style={styles.safeCard}>
+          <Ionicons name="shield-checkmark-outline" size={22} color={colors.success} />
+          <Text style={styles.safeText}>Пароль не сохраняется в открытом виде</Text>
+        </View>
+
+        {errorMessage ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+            <Text style={styles.error}>{errorMessage}</Text>
+          </View>
+        ) : null}
 
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Сохранить новый пароль"
           onPress={handleSubmit((values) => resetMutation.mutate(values))}
           style={({ pressed }) => [
             styles.button,
-            {
-              borderRadius: compact ? 16 : 18,
-              paddingVertical: compact ? 14 : 16,
-            },
             pressed && styles.buttonPressed,
             resetMutation.isPending && styles.buttonDisabled,
           ]}
@@ -164,6 +200,7 @@ export default function ResetPasswordScreen() {
           <Text style={styles.buttonText}>
             {resetMutation.isPending ? 'Сохраняем...' : 'Сохранить пароль'}
           </Text>
+          <Ionicons name="arrow-forward" size={23} color="#FFFFFF" />
         </Pressable>
       </View>
     </Screen>
@@ -171,40 +208,121 @@ export default function ResetPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    paddingBottom: 24,
+  },
   backButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    shadowColor: '#1A241F',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  successHero: {
+    minHeight: 150,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successHalo: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.24,
+    shadowRadius: 26,
+    elevation: 8,
+  },
+  copy: {
+    alignItems: 'center',
+    gap: 9,
   },
   title: {
+    color: '#091A2C',
     fontWeight: '900',
-    color: colors.text,
-    letterSpacing: -0.8,
+    letterSpacing: 0,
+    textAlign: 'center',
   },
   subtitle: {
-    color: colors.muted,
+    color: colors.text,
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 23,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  phoneAccent: {
+    color: colors.accent,
+    fontWeight: '900',
   },
   card: {
-    backgroundColor: colors.card,
-    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 18,
-    gap: 14,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#15201D',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.1,
+    shadowRadius: 26,
+    elevation: 6,
+  },
+  safeCard: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceSuccess,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+  },
+  safeText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceDanger,
+    borderWidth: 1,
+    borderColor: colors.borderDanger,
+  },
+  error: {
+    flex: 1,
+    color: colors.danger,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
   },
   button: {
-    marginTop: 6,
+    minHeight: 58,
     borderRadius: 18,
-    backgroundColor: colors.success,
-    paddingVertical: 16,
+    backgroundColor: colors.accent,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 6,
   },
   buttonPressed: {
     opacity: 0.88,
@@ -214,12 +332,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-    lineHeight: 18,
+    fontWeight: '900',
+    fontSize: 16,
   },
 });

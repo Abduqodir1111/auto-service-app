@@ -40,8 +40,7 @@ type RequestCodeResponse = {
 export default function SignUpScreen() {
   const pendingPayload = usePendingSignUpStore((state) => state.payload);
   const setPendingPayload = usePendingSignUpStore((state) => state.setPayload);
-  const layout = useResponsive();
-  const compact = layout.isSmallPhone;
+  const { isSmallPhone: compact } = useResponsive();
   const [requestError, setRequestError] = React.useState<string | null>(null);
   const {
     control,
@@ -56,12 +55,11 @@ export default function SignUpScreen() {
       phone: pendingPayload?.phone ?? '',
       password: pendingPayload?.password ?? '',
       confirmPassword: pendingPayload?.password ?? '',
-      role: pendingPayload?.role ?? (undefined as unknown as UserRole),
+      role: pendingPayload?.role ?? UserRole.CLIENT,
     },
   });
 
   const role = watch('role');
-  const roleSelected = role !== undefined;
 
   const requestCodeMutation = useMutation({
     mutationFn: async (value: { phone: string }) => {
@@ -86,295 +84,450 @@ export default function SignUpScreen() {
   });
 
   return (
-    <Screen>
-      <View
-        style={[
-          styles.brandWrap,
-          {
-            marginTop: compact ? 18 : 28,
-            marginBottom: compact ? 16 : 24,
-            gap: compact ? 6 : 8,
-          },
-        ]}
-      >
-        <Text style={[styles.brandTitle, { fontSize: layout.font(36, 0.22, 30, 38) }]}>
-          Регистрация
-        </Text>
-        <View style={styles.brandUnderline} />
-      </View>
-
-      <Text style={styles.rolePrompt}>
-        {roleSelected ? 'Вы регистрируетесь как:' : 'Выберите, кто вы:'}
-      </Text>
+    <Screen
+      style={[
+        styles.screen,
+        {
+          gap: compact ? 10 : 12,
+          paddingTop: compact ? 10 : 14,
+          paddingBottom: compact ? 18 : 24,
+        },
+      ]}
+    >
+      <Text style={styles.rolePrompt}>Вы регистрируетесь как:</Text>
 
       <View style={[styles.roleRow, { gap: compact ? 8 : 10 }]}>
         {[UserRole.CLIENT, UserRole.MASTER].map((value) => {
           const isActive = role === value;
+          const isClient = value === UserRole.CLIENT;
           return (
             <Pressable
               key={value}
+              accessibilityRole="button"
+              accessibilityLabel={isClient ? 'Зарегистрироваться как клиент' : 'Зарегистрироваться как мастер или СТО'}
               onPress={() => setValue('role', value, { shouldValidate: true })}
-              style={[
-                styles.roleChip,
+              style={({ pressed }) => [
+                styles.roleCard,
                 {
-                  borderRadius: compact ? 16 : 18,
-                  paddingVertical: compact ? 12 : 16,
-                  paddingHorizontal: compact ? 8 : 10,
+                  borderRadius: compact ? 18 : 20,
+                  padding: compact ? 12 : 14,
                 },
-                isActive && styles.roleChipActive,
+                isActive && styles.roleCardActive,
+                pressed && styles.buttonPressed,
               ]}
             >
-              <Ionicons
-                name={value === UserRole.CLIENT ? 'person-outline' : 'construct-outline'}
-                size={22}
-                color={isActive ? colors.accentDark : colors.muted}
-              />
-              <Text
-                style={[
-                  styles.roleText,
-                  { fontSize: layout.font(14, 0.2, 13, 15) },
-                  isActive && styles.roleTextActive,
-                ]}
-              >
-                {value === UserRole.CLIENT ? 'Я клиент' : 'Я мастер / СТО'}
-              </Text>
+              <View style={[styles.roleIcon, isActive && styles.roleIconActive]}>
+                <Ionicons
+                  name={isClient ? 'person-outline' : 'construct-outline'}
+                  size={26}
+                  color={isActive ? colors.success : colors.accent}
+                />
+              </View>
+              <View style={styles.roleCopy}>
+                <Text style={styles.roleTitle}>
+                  {isClient ? 'Я клиент' : 'Я мастер / СТО'}
+                </Text>
+                <Text style={styles.roleSubtitle}>
+                  {isClient ? 'Ищу услуги и мастеров' : 'Предоставляю услуги'}
+                </Text>
+              </View>
+              {isActive ? (
+                <View style={styles.roleCheck}>
+                  <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                </View>
+              ) : null}
             </Pressable>
           );
         })}
       </View>
 
-      {roleSelected ? (
-        <>
-          <View
-            style={[
-              styles.card,
-              {
-                borderRadius: compact ? 20 : 24,
-                padding: compact ? 14 : 18,
-                gap: compact ? 12 : 14,
-              },
-            ]}
-          >
-            <Controller
-              control={control}
-              name="fullName"
-              render={({ field }) => (
-                <Field
-                  label="Имя"
-                  icon="person-outline"
-                  placeholder="Ваше имя"
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  error={errors.fullName?.message}
-                />
-              )}
+      <View
+        style={[
+          styles.formCard,
+          {
+            borderRadius: compact ? 26 : 30,
+            padding: compact ? 14 : 16,
+            gap: compact ? 10 : 11,
+          },
+        ]}
+      >
+        <Controller
+          control={control}
+          name="fullName"
+          render={({ field }) => (
+            <Field
+              label="Ваше имя"
+              icon="person-outline"
+              placeholder="Введите ваше имя"
+              value={field.value}
+              onChangeText={field.onChange}
+              error={errors.fullName?.message}
             />
-            <Controller
-              control={control}
-              name="phone"
-              render={({ field }) => (
-                <Field
-                  label="Телефон"
-                  icon="call-outline"
-                  placeholder="+998 90 123 45 67"
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  keyboardType="phone-pad"
-                  error={errors.phone?.message}
-                />
-              )}
+          )}
+        />
+        <Controller
+          control={control}
+          name="phone"
+          render={({ field }) => (
+            <Field
+              label="Телефон"
+              icon="call-outline"
+              placeholder="+998 90 123 45 67"
+              value={field.value}
+              onChangeText={field.onChange}
+              keyboardType="phone-pad"
+              error={errors.phone?.message}
             />
-            <Controller
-              control={control}
-              name="password"
-              render={({ field }) => (
-                <Field
-                  label="Пароль"
-                  icon="lock-closed-outline"
-                  placeholder="Минимум 6 символов"
-                  secureTextEntry
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  error={errors.password?.message}
-                />
-              )}
+          )}
+        />
+        <Controller
+          control={control}
+          name="password"
+          render={({ field }) => (
+            <Field
+              label="Пароль"
+              icon="lock-closed-outline"
+              placeholder="Минимум 6 символов"
+              secureTextEntry
+              value={field.value}
+              onChangeText={field.onChange}
+              error={errors.password?.message}
             />
-            <Controller
-              control={control}
-              name="confirmPassword"
-              render={({ field }) => (
-                <Field
-                  label="Подтвердите пароль"
-                  icon="lock-closed-outline"
-                  placeholder="Введите пароль ещё раз"
-                  secureTextEntry
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  error={errors.confirmPassword?.message}
-                />
-              )}
+          )}
+        />
+        <Controller
+          control={control}
+          name="confirmPassword"
+          render={({ field }) => (
+            <Field
+              label="Подтвердите пароль"
+              icon="lock-closed-outline"
+              placeholder="Введите пароль ещё раз"
+              secureTextEntry
+              value={field.value}
+              onChangeText={field.onChange}
+              error={errors.confirmPassword?.message}
             />
+          )}
+        />
 
-            {requestError ? <Text style={styles.error}>{requestError}</Text> : null}
-
-            <Pressable
-              onPress={handleSubmit((values) => {
-                const phone = normalizePhoneForApi(values.phone);
-                setPendingPayload({
-                  fullName: values.fullName,
-                  phone,
-                  password: values.password,
-                  role: values.role,
-                });
-                requestCodeMutation.mutate({ phone });
-              })}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                {
-                  borderRadius: compact ? 18 : 20,
-                  paddingVertical: compact ? 14 : 16,
-                },
-                pressed && styles.buttonPressed,
-                requestCodeMutation.isPending && styles.buttonDisabled,
-              ]}
-              disabled={requestCodeMutation.isPending}
-            >
-              <Ionicons name="send" size={18} color="#FFFFFF" style={styles.btnIcon} />
-              <Text style={styles.primaryButtonText}>
-                {requestCodeMutation.isPending ? 'Отправляем SMS...' : 'Зарегистрироваться'}
-              </Text>
-            </Pressable>
+        <View style={styles.privacyCard}>
+          <View style={styles.privacyIcon}>
+            <Ionicons name="shield-checkmark-outline" size={25} color={colors.accent} />
           </View>
-
-          <Pressable
-            onPress={() => router.back()}
-            style={[styles.backlinkWrap, { marginTop: compact ? 14 : 20 }]}
-          >
-            <Text style={styles.backlinkText}>
-              Уже есть аккаунт?{' '}
-              <Text style={styles.backlinkAccent}>Войти</Text>
+          <View style={styles.privacyCopy}>
+            <Text style={styles.privacyTitle}>Ваши данные под защитой</Text>
+            <Text style={styles.privacyText}>
+              Мы не передаём данные третьим лицам и используем их только для работы сервиса.
             </Text>
-          </Pressable>
-        </>
-      ) : null}
+          </View>
+        </View>
+
+        {requestError ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+            <Text style={styles.error}>{requestError}</Text>
+          </View>
+        ) : null}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Зарегистрироваться"
+          onPress={handleSubmit((values) => {
+            const phone = normalizePhoneForApi(values.phone);
+            setPendingPayload({
+              fullName: values.fullName,
+              phone,
+              password: values.password,
+              role: values.role,
+            });
+            requestCodeMutation.mutate({ phone });
+          })}
+          style={({ pressed }) => [
+            styles.submitButton,
+            pressed && styles.buttonPressed,
+            requestCodeMutation.isPending && styles.buttonDisabled,
+          ]}
+          disabled={requestCodeMutation.isPending}
+        >
+          <Text numberOfLines={1} adjustsFontSizeToFit style={styles.submitText}>
+            {requestCodeMutation.isPending ? 'Отправляем SMS...' : 'Зарегистрироваться'}
+          </Text>
+          <View style={styles.submitArrow}>
+            <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
+          </View>
+        </Pressable>
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Войти в существующий аккаунт"
+        onPress={() => router.back()}
+        style={styles.loginLink}
+      >
+        <Text style={styles.loginLinkText}>
+          Уже есть аккаунт? <Text style={styles.loginLinkAccent}>Войти</Text>
+        </Text>
+      </Pressable>
+
+      <View style={styles.trustRow}>
+        <View style={styles.trustItem}>
+          <View style={styles.trustIcon}>
+            <Ionicons name="shield-checkmark-outline" size={22} color={colors.success} />
+          </View>
+          <Text style={styles.trustText}>Проверенные мастера</Text>
+        </View>
+        <View style={styles.trustDivider} />
+        <View style={styles.trustItem}>
+          <View style={styles.trustIconWarm}>
+            <Ionicons name="flash-outline" size={22} color={colors.accent} />
+          </View>
+          <Text style={styles.trustText}>Быстрый отклик</Text>
+        </View>
+        <View style={styles.trustDivider} />
+        <View style={styles.trustItem}>
+          <View style={styles.trustIconCool}>
+            <Ionicons name="pricetag-outline" size={22} color="#4F46E5" />
+          </View>
+          <Text style={styles.trustText}>Прозрачные цены</Text>
+        </View>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  brandWrap: {
-    marginTop: 28,
-    marginBottom: 24,
-    alignItems: 'center',
-    gap: 8,
+  screen: {
+    paddingBottom: 24,
   },
-  brandTitle: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: colors.accent,
-    letterSpacing: -1,
-    textShadowColor: 'rgba(216, 104, 42, 0.22)',
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 10,
-  },
-  brandUnderline: {
-    width: 48,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.accent,
-  },
-
   rolePrompt: {
-    fontSize: 14,
-    color: colors.muted,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 4,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
   },
-
   roleRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 8,
   },
-  roleChip: {
+  roleCard: {
     flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: 18,
-    paddingVertical: 16,
-    paddingHorizontal: 10,
-    backgroundColor: colors.card,
-  },
-  roleChipActive: {
-    backgroundColor: '#FFF0E5',
-    borderColor: colors.accent,
-  },
-  roleText: {
-    textAlign: 'center',
-    color: colors.text,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  roleTextActive: {
-    color: colors.accentDark,
-  },
-
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 24,
+    minHeight: 104,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 18,
-    gap: 14,
-    marginTop: 8,
-  },
-
-  primaryButton: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#1A241F',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 2,
+  },
+  roleCardActive: {
+    borderColor: '#6FCF8F',
+    backgroundColor: '#F7FFF9',
+  },
+  roleIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceWarm,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 6,
-    borderRadius: 20,
-    backgroundColor: colors.success,
-    paddingVertical: 16,
-    shadowColor: colors.success,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    elevation: 5,
   },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-    letterSpacing: 0.3,
+  roleIconActive: {
+    backgroundColor: colors.surfaceSuccess,
   },
-  btnIcon: {
-    marginRight: 8,
+  roleCopy: {
+    flex: 1,
+    gap: 5,
   },
-  buttonPressed: { opacity: 0.88 },
-  buttonDisabled: { opacity: 0.5 },
-
-  backlinkWrap: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  backlinkText: {
-    color: colors.muted,
+  roleTitle: {
+    color: colors.text,
     fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0,
   },
-  backlinkAccent: {
-    color: colors.accentDark,
+  roleSubtitle: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '700',
   },
-
+  roleCheck: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#15201D',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.11,
+    shadowRadius: 28,
+    elevation: 7,
+  },
+  privacyCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceWarm,
+    borderWidth: 1,
+    borderColor: colors.borderWarm,
+  },
+  privacyIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  privacyCopy: {
+    flex: 1,
+    gap: 5,
+  },
+  privacyTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  privacyText: {
+    color: colors.text,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceDanger,
+    borderWidth: 1,
+    borderColor: colors.borderDanger,
+  },
   error: {
+    flex: 1,
     color: colors.danger,
     fontSize: 13,
-    marginLeft: 4,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  submitButton: {
+    minHeight: 58,
+    borderRadius: 20,
+    backgroundColor: colors.accent,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 7,
+  },
+  submitText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '900',
+    maxWidth: '82%',
+  },
+  submitArrow: {
+    position: 'absolute',
+    right: 16,
+  },
+  loginLink: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  loginLinkText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  loginLinkAccent: {
+    color: colors.accent,
+    fontWeight: '900',
+  },
+  trustRow: {
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    shadowColor: '#1A241F',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 3,
+  },
+  trustItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 7,
+  },
+  trustIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surfaceSuccess,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trustIconWarm: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surfaceWarm,
+    borderWidth: 1,
+    borderColor: colors.borderWarm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trustIconCool: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#DDE3FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trustText: {
+    color: colors.text,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  trustDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: 6,
+  },
+  buttonPressed: {
+    opacity: 0.88,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });

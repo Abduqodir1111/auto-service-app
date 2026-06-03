@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, usePathname } from 'expo-router';
 import { AuthUser, ServiceCallItem, ServiceCallStatus, UserRole } from '@stomvp/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
@@ -42,10 +42,15 @@ installNotificationHandler();
 installNotificationResponseHandler();
 
 function RootLayout() {
+  const pathname = usePathname();
   const hydrated = useAuthStore((state) => state.hydrated);
   const hydrate = useAuthStore((state) => state.hydrate);
   const session = useAuthStore((state) => state.session);
   const setSession = useAuthStore((state) => state.setSession);
+  const isAuthRoute = pathname.startsWith('/sign-in') ||
+    pathname.startsWith('/sign-up') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password');
 
   useEffect(() => {
     hydrate();
@@ -269,7 +274,7 @@ function RootLayout() {
             options={{ title: 'Срочный вызов', headerShown: false, gestureEnabled: false }}
           />
         </Stack>
-        <GlobalNetworkBanner />
+        {isAuthRoute ? null : <GlobalNetworkBanner />}
         <FeedbackHost />
       </View>
     </QueryClientProvider>

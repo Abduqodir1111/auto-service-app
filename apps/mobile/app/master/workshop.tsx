@@ -216,6 +216,10 @@ async function deletePersistedDraft(userId: string | undefined, draftKey: string
 }
 
 function getApiErrorMessage(error: unknown, fallback: string) {
+  if (axios.isAxiosError(error) && error.response?.status === 413) {
+    return 'Фото слишком большое для загрузки. Выберите другое фото или сделайте снимок заново.';
+  }
+
   const apiMessage = axios.isAxiosError(error) ? error.response?.data?.message : null;
 
   if (typeof apiMessage === 'string') {
@@ -768,17 +772,13 @@ export default function WorkshopEditorScreen() {
         type: asset.mimeType || 'image/jpeg',
       } as never);
 
-      await api.post(`/uploads/workshops/${activeWorkshopId}/photos`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      await api.post(`/uploads/workshops/${activeWorkshopId}/photos`, formData);
     },
     onSuccess: refreshWorkshopData,
     onError: (error) => {
       showError(
         'Ошибка загрузки',
-        getApiErrorMessage(error, 'Не удалось загрузить фото. Проверьте сеть и попробуйте ещё раз.'),
+        getApiErrorMessage(error, 'Не удалось загрузить фото. Проверьте подключение и попробуйте ещё раз.'),
       );
     },
   });

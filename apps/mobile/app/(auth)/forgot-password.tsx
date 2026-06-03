@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 import { router } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
 import { Field } from '../../components/field';
 import { Screen } from '../../components/screen';
@@ -59,115 +59,206 @@ export default function ForgotPasswordScreen() {
   })();
 
   return (
-    <Screen>
-      <Pressable onPress={() => router.back()} style={styles.backButton}>
-        <Ionicons name="chevron-back" size={24} color={colors.text} />
-      </Pressable>
-
-      <View style={{ gap: compact ? 6 : 8 }}>
-        <Text
-          style={[
-            styles.title,
-            {
-              marginTop: compact ? 2 : 10,
-              fontSize: layout.font(32, 0.18, 28, 34),
-              lineHeight: layout.font(38, 0.18, 34, 40),
-            },
-          ]}
-        >
-          Восстановление пароля
-        </Text>
-        <Text style={styles.subtitle}>
-          Введите номер телефона. Если аккаунт существует, мы отправим SMS-код для
-          подтверждения.
-        </Text>
-      </View>
-
+    <Screen
+      style={[
+        styles.screen,
+        {
+          gap: compact ? 12 : 14,
+          paddingTop: compact ? 8 : 12,
+          paddingBottom: compact ? 18 : 24,
+        },
+      ]}
+    >
       <View
         style={[
-          styles.card,
+          styles.shell,
           {
-            borderRadius: compact ? 20 : 24,
-            padding: compact ? 14 : 18,
-            gap: compact ? 12 : 14,
+            borderRadius: compact ? 26 : 30,
           },
         ]}
       >
-        <Controller
-          control={control}
-          name="phone"
-          render={({ field }) => (
-            <Field
-              label="Телефон"
-              icon="call-outline"
-              placeholder="+998 90 123 45 67"
-              keyboardType="phone-pad"
-              value={field.value}
-              onChangeText={field.onChange}
-              error={errors.phone?.message}
-            />
-          )}
-        />
-
-        {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
-
-        <Pressable
-          onPress={handleSubmit((values) => requestMutation.mutate(values))}
-          style={({ pressed }) => [
-            styles.button,
+        <ImageBackground
+          source={require('../../assets/auth-hero.png')}
+          imageStyle={styles.heroImage}
+          style={[
+            styles.hero,
             {
-              borderRadius: compact ? 16 : 18,
-              paddingVertical: compact ? 14 : 16,
+              height: compact ? 196 : 216,
             },
-            pressed && styles.buttonPressed,
-            requestMutation.isPending && styles.buttonDisabled,
           ]}
-          disabled={requestMutation.isPending}
         >
-          <Text style={styles.buttonText}>
-            {requestMutation.isPending ? 'Отправляем...' : 'Получить SMS-код'}
-          </Text>
-        </Pressable>
+          <View style={styles.heroWash} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Назад"
+            hitSlop={10}
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <Ionicons name="chevron-back" size={25} color="#091A2C" />
+          </Pressable>
+        </ImageBackground>
+
+        <View
+          style={[
+            styles.content,
+            {
+              padding: compact ? 14 : 16,
+              gap: compact ? 12 : 14,
+            },
+          ]}
+        >
+          <View style={styles.copy}>
+            <Text
+              style={[
+                styles.title,
+                {
+                  fontSize: layout.font(30, 0.2, 27, 32),
+                  lineHeight: layout.font(36, 0.16, 33, 38),
+                },
+              ]}
+            >
+              Восстановление доступа
+            </Text>
+            <Text style={styles.subtitle}>
+              Введите номер телефона. Мы отправим SMS-код для подтверждения.
+            </Text>
+          </View>
+
+          <View style={styles.formCard}>
+            <Controller
+              control={control}
+              name="phone"
+              render={({ field }) => (
+                <Field
+                  label="Телефон"
+                  icon="call-outline"
+                  placeholder="+998 90 123 45 67"
+                  keyboardType="phone-pad"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.phone?.message}
+                />
+              )}
+            />
+          </View>
+
+          {errorMessage ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+              <Text style={styles.error}>{errorMessage}</Text>
+            </View>
+          ) : null}
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Получить SMS-код"
+            onPress={handleSubmit((values) => requestMutation.mutate(values))}
+            style={({ pressed }) => [
+              styles.button,
+              pressed && styles.buttonPressed,
+              requestMutation.isPending && styles.buttonDisabled,
+            ]}
+            disabled={requestMutation.isPending}
+          >
+            <Ionicons name="paper-plane-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.buttonText}>
+              {requestMutation.isPending ? 'Отправляем...' : 'Получить код'}
+            </Text>
+          </Pressable>
+
+          <View style={styles.timeHint}>
+            <Ionicons name="time-outline" size={17} color={colors.muted} />
+            <Text style={styles.timeHintText}>Код обычно приходит в течение 30 секунд</Text>
+          </View>
+
+          <View style={styles.safeHint}>
+            <Ionicons name="lock-closed-outline" size={17} color={colors.success} />
+            <Text style={styles.safeHintText}>Ваши данные защищены</Text>
+          </View>
+        </View>
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    paddingBottom: 24,
+  },
+  shell: {
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(24, 33, 32, 0.1)',
+    shadowColor: '#1A241F',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 5,
+  },
+  hero: {
+    justifyContent: 'flex-start',
+  },
+  heroImage: {
+    resizeMode: 'cover',
+  },
+  heroWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 246, 237, 0.14)',
+  },
   backButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    marginLeft: 16,
+    marginTop: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    shadowColor: '#1A241F',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.11,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  content: {
+    backgroundColor: '#FFFFFF',
+  },
+  copy: {
+    gap: 7,
   },
   title: {
+    color: '#091A2C',
     fontWeight: '900',
-    color: colors.text,
-    letterSpacing: -0.8,
+    letterSpacing: 0,
   },
   subtitle: {
     color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
   },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 24,
+  formCard: {
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 18,
-    gap: 14,
+    backgroundColor: colors.card,
+    padding: 10,
   },
   button: {
-    marginTop: 6,
+    minHeight: 58,
     borderRadius: 18,
-    backgroundColor: colors.success,
-    paddingVertical: 16,
+    backgroundColor: colors.accent,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 6,
   },
   buttonPressed: {
     opacity: 0.88,
@@ -177,12 +268,52 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 15,
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  timeHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  timeHintText: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  safeHint: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceSuccess,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  safeHintText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceDanger,
+    borderWidth: 1,
+    borderColor: colors.borderDanger,
   },
   error: {
+    flex: 1,
     color: colors.danger,
     fontSize: 13,
     lineHeight: 18,
+    fontWeight: '700',
   },
 });
