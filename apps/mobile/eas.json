@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 5.0.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -12,7 +12,7 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true,
+      "autoIncrement": false,
       "credentialsSource": "local"
     }
   },
@@ -20,6 +20,10 @@
     "production": {
       "ios": {
         "ascAppId": "6763314411"
+      },
+      "android": {
+        "serviceAccountKeyPath": "/Users/abdukodir/.config/mastertop/google-play-service-account.json",
+        "track": "production"
       }
     }
   }
